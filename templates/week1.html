@@ -6,20 +6,54 @@
 {% block content %}
 <div class="section-header">
   <h2>Exercise 1 &amp; 2 — Data Collection &amp; EDA</h2>
-  <p>Source dataset: <strong>main_dataset.csv</strong> ({{ analysis.total_rows | format_num }} raw rows · 11 original columns) enriched with local <strong>book-covers/</strong> images.</p>
+  <p>Source dataset: <strong id="active-dataset-name">main_dataset.csv</strong> (<span id="active-rows">{{ analysis.total_rows | format_num }}</span> rows · 11 original columns) enriched with local <strong>book-covers/</strong> images.</p>
   <div style="display:flex;gap:0.75rem;align-items:center;margin-top:0.75rem;flex-wrap:wrap">
+
+    <!-- ▶ RUN FULL PIPELINE -->
+    <button type="button" id="btn-run-full-pipeline" class="btn" style="background:linear-gradient(135deg,var(--primary),var(--accent));color:#fff;font-size:0.85rem;padding:0.6rem 1.2rem;cursor:pointer;border:none;border-radius:8px;font-weight:700;display:flex;align-items:center;gap:0.5rem">
+      <i class="fa-solid fa-rocket"></i> Run Full Pipeline
+    </button>
+
+    <!-- IMPORT NEW DATASET -->
+    <label for="import-dataset-file" class="btn badge badge-amber" style="font-size:0.8rem;padding:0.55rem 1rem;cursor:pointer">
+      <i class="fa-solid fa-file-import"></i> Import New Dataset
+    </label>
+    <input type="file" id="import-dataset-file" accept=".csv" style="display:none">
+
+    <!-- ADD 10 DUMMY ROWS -->
+    <button type="button" id="btn-add-10-dummy-rows" class="btn badge badge-teal" style="font-size:0.8rem;padding:0.55rem 1rem;cursor:pointer;border:none">
+      <i class="fa-solid fa-plus-circle"></i> + Add 10 Dummy Rows to Processed CSV
+    </button>
+
     <button type="button" id="btn-rerun-eda-scratch" class="btn badge badge-purple" style="font-size:0.8rem;padding:0.55rem 1rem;cursor:pointer;border:none">
-      <i class="fa-solid fa-arrows-rotate"></i> Re-Run EDA Process From Scratch
+      <i class="fa-solid fa-arrows-rotate"></i> Re-Run EDA From Scratch
     </button>
     <a href="/api/download-processed-csv" class="btn badge badge-blue" style="text-decoration:none;font-size:0.8rem;padding:0.55rem 1rem">
-      <i class="fa-solid fa-download"></i> Download Processed CSV ({{ analysis.total_rows | format_num }} rows · 19 cols)
-    </a>
-    <a href="/week2" class="btn badge badge-green" style="text-decoration:none;font-size:0.8rem;padding:0.55rem 1rem">
-      <i class="fa-solid fa-arrows-spin"></i> Pass Processed CSV to Week 2 ETL <i class="fa-solid fa-arrow-right"></i>
+      <i class="fa-solid fa-download"></i> Download Processed CSV
     </a>
     <span id="rerun-eda-status"></span>
   </div>
 </div>
+
+<!-- ═══ FULL PIPELINE RESULT PANEL (hidden until run) ═══ -->
+<div id="pipeline-result-panel" class="card mb-4" style="display:none;border-color:var(--primary)">
+  <div class="card-title" style="justify-content:space-between">
+    <span><i class="fa-solid fa-rocket" style="color:var(--primary)"></i> <strong>Full Pipeline Execution — Live Results</strong></span>
+    <span id="pipeline-total-ms" class="badge badge-green"></span>
+  </div>
+  <div id="pipeline-phases" style="display:flex;flex-direction:column;gap:0.75rem;margin-bottom:1rem"></div>
+  <div id="pipeline-outputs-card" style="background:var(--surface2);border-radius:6px;padding:1rem;display:none">
+    <div style="font-weight:700;font-size:0.82rem;color:var(--muted);margin-bottom:0.5rem"><i class="fa-solid fa-folder-open"></i> Output Files Written Locally:</div>
+    <div id="pipeline-outputs-list" style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;line-height:1.9;color:var(--secondary)"></div>
+  </div>
+</div>
+
+<!-- ═══ IMPORT DATASET RESULT PANEL (hidden until import) ═══ -->
+<div id="import-result-panel" class="card mb-4" style="display:none;border-color:var(--warning)">
+  <div class="card-title"><i class="fa-solid fa-file-import" style="color:var(--warning)"></i> <strong>New Dataset Import Results</strong></div>
+  <div id="import-result-content"></div>
+</div>
+
 
 <!-- Navigation Sub-Tabs -->
 <div class="sub-nav-tabs mb-4">

@@ -132,7 +132,7 @@ def load_and_preprocess():
     Returns cleaned DataFrame.
     """
     global _DF_CACHE
-    if _DF_CACHE is not None:
+    if _DF_CACHE is not None and len(_DF_CACHE) > 5:
         return _DF_CACHE
 
     # ── 1. Load ──────────────────────────────────
@@ -1465,6 +1465,293 @@ def api_rerun_eda_scratch():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/run-full-pipeline", methods=["POST"])
+def api_run_full_pipeline():
+    """
+    Run the complete end-to-end pipeline across all exercises and save all outputs locally.
+    Phase 1 — EDA        → outputs/week1/processed_books.csv + category_stats.csv
+    Phase 2 — ETL        → outputs/week2/week2_etl.db  (SQLite fact table)
+    Phase 3 — Warehouse  → outputs/week3/week3_oltp.db + week3_olap.db
+    Phase 4 — Resilience → outputs/week5/week5_quality_audit.json
+    """
+    global _DF_CACHE
+    try:
+        t_total = time.time()
+        phases = []
+
+        # ── PHASE 1: EDA & Preprocessing ─────────────────────────
+        t0 = time.time()
+        _DF_CACHE = None
+        df = load_and_preprocess()
+        analysis = analyze_df(df)
+        cat_stats = get_category_stats(df)
+
+        # Save processed CSV to outputs/week1/
+        df_export = df.drop(columns=["img_path_raw"], errors="ignore")
+        df_export.to_csv(WEEK1_PROCESSED_CSV, index=False)
+
+        # Save category stats CSV to outputs/week1/
+        if cat_stats:
+            pd.DataFrame(cat_stats).to_csv(WEEK1_CAT_STATS_CSV, index=False)
+
+        phases.append({
+            "phase": 1,
+            "name": "EDA & Preprocessing",
+            "status": "SUCCESS",
+            "records": len(df),
+            "ms": int((time.time() - t0) * 1000),
+            "outputs": [
+                f"outputs/week1/processed_books.csv  ({len(df):,} rows, 19 cols)",
+                "outputs/week1/category_stats.csv",
+            ]
+        })
+
+        # ── PHASE 2: ETL → SQLite ────────────────────────────────
+        t0 = time.time()
+        etl_result = execute_sqlite_etl(df, load_strategy="full")
+        phases.append({
+            "phase": 2,
+            "name": "ETL Load → SQLite",
+            "status": "SUCCESS",
+            "records": etl_result.get("loaded_cnt", 0),
+            "ms": etl_result.get("total_ms", 0),
+            "outputs": [
+                f"outputs/week2/week2_etl.db  ({etl_result.get('db_size_kb', 0)} KB)",
+                f"books_etl_fact table: {etl_result.get('total_fact_records', 0):,} rows",
+            ]
+        })
+
+        # ── PHASE 3: Data Warehouse (OLTP + OLAP) ────────────────
+        t0 = time.time()
+        init_week3_databases(df)
+        oltp_size = round(os.path.getsize(WEEK3_OLTP_DB_PATH) / 1024, 1) if os.path.exists(WEEK3_OLTP_DB_PATH) else 0
+        olap_size = round(os.path.getsize(WEEK3_OLAP_DB_PATH) / 1024, 1) if os.path.exists(WEEK3_OLAP_DB_PATH) else 0
+        phases.append({
+            "phase": 3,
+            "name": "Data Warehouse Design",
+            "status": "SUCCESS",
+            "records": len(df),
+            "ms": int((time.time() - t0) * 1000),
+            "outputs": [
+                f"outputs/week3/week3_oltp.db  ({oltp_size} KB) — 3NF Relational DB",
+                f"outputs/week3/week3_olap.db  ({olap_size} KB) — Star Schema DW",
+            ]
+        })
+
+        # ── PHASE 4: Resilience — Data Quality Audit ─────────────
+        t0 = time.time()
+        validation = validate_data(df)
+        audit = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "source": "full_pipeline_run",
+            "dataset_rows": len(df),
+            "total_checks": validation.get("total", 0),
+            "passed": validation.get("passed", 0),
+            "warned": validation.get("warned", 0),
+            "failed": validation.get("failed", 0),
+            "checks": validation.get("checks", [])
+        }
+        with open(WEEK5_AUDIT_JSON, "w") as f_audit:
+            json.dump(audit, f_audit, indent=2, default=str)
+        phases.append({
+            "phase": 4,
+            "name": "Resilient Pipeline Audit",
+            "status": "SUCCESS",
+            "records": validation.get("total", 0),
+            "ms": int((time.time() - t0) * 1000),
+            "outputs": [
+                f"outputs/week5/week5_quality_audit.json  ({validation.get('passed', 0)} passed / {validation.get('warned', 0)} warned / {validation.get('failed', 0)} failed)",
+            ]
+        })
+
+        total_ms = int((time.time() - t_total) * 1000)
+
+        # Collect all output file paths
+        all_outputs = []
+        for p in phases:
+            all_outputs.extend(p.get("outputs", []))
+
+        return jsonify(safe_json({
+            "success": True,
+            "total_ms": total_ms,
+            "dataset_rows": len(df),
+            "phases": phases,
+            "all_outputs": all_outputs,
+            "analysis": analysis,
+            "cat_stats": cat_stats,
+            "eda_comparison": get_eda_comparison()
+        }))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/import-new-dataset", methods=["POST"])
+def api_import_new_dataset():
+    """
+    Import a new CSV dataset, replace the active dataset, and run the full pipeline on it.
+    The new dataset becomes the source for all downstream exercises.
+    """
+    global _DF_CACHE, MAIN_CSV
+    try:
+        f = request.files.get("file")
+        if not f:
+            return jsonify({"error": "No file provided"}), 400
+
+        filename = f.filename or "new_dataset.csv"
+        content = f.read().decode("utf-8", errors="replace")
+        df_new = pd.read_csv(StringIO(content), low_memory=False)
+
+        if df_new.empty:
+            return jsonify({"error": "Uploaded CSV is empty"}), 400
+
+        # Save uploaded dataset to outputs/week1/ as the new source
+        new_csv_path = os.path.join(WEEK1_OUT, f"imported_{filename}")
+        df_new.to_csv(new_csv_path, index=False)
+
+        # Apply standardised preprocessing: detect & rename common column aliases
+        rename_map = {}
+        if "name" in df_new.columns and "title" not in df_new.columns:
+            rename_map["name"] = "title"
+        if "book_depository_stars" in df_new.columns and "rating" not in df_new.columns:
+            rename_map["book_depository_stars"] = "rating"
+        if "img_paths" in df_new.columns:
+            rename_map["img_paths"] = "img_path_raw"
+        if rename_map:
+            df_new.rename(columns=rename_map, inplace=True)
+
+        # Ensure required numeric columns exist with defaults
+        for col in ["price", "old_price", "rating"]:
+            if col not in df_new.columns:
+                df_new[col] = 10.0 if col == "price" else (10.0 if col == "old_price" else 4.0)
+            df_new[col] = pd.to_numeric(df_new[col], errors="coerce")
+
+        df_new["old_price"] = df_new["old_price"].fillna(df_new["price"])
+        df_new["price"]     = df_new["price"].fillna(df_new["price"].median())
+        df_new["rating"]    = df_new["rating"].fillna(df_new["rating"].mode()[0] if not df_new["rating"].mode().empty else 4.0)
+
+        for col in ["author", "format", "category", "isbn"]:
+            if col not in df_new.columns:
+                df_new[col] = "Unknown"
+            df_new[col] = df_new[col].fillna("Unknown").astype(str).str.strip()
+
+        # Dedup on isbn if available
+        if "isbn" in df_new.columns:
+            df_new = df_new.drop_duplicates(subset=["isbn"], keep="first").reset_index(drop=True)
+
+        # Feature Engineering
+        df_new["discount_amount"] = (df_new["old_price"] - df_new["price"]).clip(lower=0).round(2)
+        df_new["discount_pct"]    = ((df_new["discount_amount"] / df_new["old_price"].replace(0, np.nan)) * 100).fillna(0).round(2)
+        df_new["price_gbp"]       = (df_new["price"] * 0.79).round(2)
+        df_new["value_score"]     = (df_new["rating"] / df_new["price"].replace(0, np.nan)).fillna(0).round(4)
+        df_new["is_bestseller"]   = df_new["rating"] >= 4.5
+        df_new["isbn13_valid"]    = df_new["isbn"].str.match(r"^\d{13}$") if "isbn" in df_new.columns else False
+        df_new["title_length"]    = df_new["title"].str.len().fillna(0).astype(int) if "title" in df_new.columns else 0
+        df_new["word_count"]      = df_new["title"].str.split().str.len().fillna(0).astype(int) if "title" in df_new.columns else 0
+
+        def price_tier(p):
+            if p < 10:    return "Budget (<$10)"
+            elif p <= 25: return "Standard ($10-25)"
+            elif p <= 50: return "Premium ($25-50)"
+            else:         return "Luxury (>$50)"
+
+        def disc_tier(d):
+            if d <= 0:    return "No Discount"
+            elif d < 15:  return "Low (<15%)"
+            elif d <= 35: return "Medium (15-35%)"
+            else:         return "High (>35%)"
+
+        df_new["price_tier"]    = df_new["price"].apply(price_tier)
+        df_new["discount_tier"] = df_new["discount_pct"].apply(disc_tier)
+        df_new["cover_url"]     = None
+
+        # Save processed new dataset to Week 1 output
+        df_new.drop(columns=["img_path_raw"], errors="ignore").to_csv(WEEK1_PROCESSED_CSV, index=False)
+
+        # Replace in-memory cache so all exercises use the new dataset
+        _DF_CACHE = df_new
+
+        # Propagate to all downstream databases
+        execute_sqlite_etl(df_new, load_strategy="full")
+        init_week3_databases(df_new)
+
+        # Run analysis on new dataset
+        analysis  = analyze_df(df_new)
+        cat_stats = get_category_stats(df_new)
+        validation = validate_data(df_new)
+
+        return jsonify(safe_json({
+            "success": True,
+            "message": f"New dataset '{filename}' imported successfully! {len(df_new):,} records processed across all exercises.",
+            "filename": filename,
+            "rows": len(df_new),
+            "cols": len(df_new.columns),
+            "analysis": analysis,
+            "cat_stats": cat_stats,
+            "validation_passed": validation.get("passed", 0),
+            "validation_warned": validation.get("warned", 0),
+            "outputs": [
+                f"outputs/week1/imported_{filename}  (raw copy saved)",
+                f"outputs/week1/processed_books.csv  ({len(df_new):,} rows)",
+                "outputs/week2/week2_etl.db  (rebuilt with new data)",
+                "outputs/week3/week3_oltp.db  (rebuilt with new data)",
+                "outputs/week3/week3_olap.db  (rebuilt with new data)",
+            ]
+        }))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/add-10-dummy-rows", methods=["POST"])
+def api_add_10_dummy_rows():
+    """
+    Generate and append 10 realistic synthetic dummy book records to the processed dataset.
+    Updates in-memory cache, saves to outputs/week1/processed_books.csv, and propagates to downstream databases.
+    """
+    global _DF_CACHE
+    try:
+        dummy_templates = [
+            {"title": "Python Data Engineering Patterns", "author": "Dr. Alex Mercer", "category": "Computing", "format": "Paperback", "price": 24.99, "old_price": 29.99, "rating": 4.8, "isbn": "9781098765401"},
+            {"title": "Scalable Cloud Data Warehousing", "author": "Sarah Jenkins", "category": "Computing", "format": "Hardback", "price": 45.00, "old_price": 55.00, "rating": 4.7, "isbn": "9781098765402"},
+            {"title": "Real-Time Event Streaming with Kafka", "author": "Marcus Vance", "category": "Computing", "format": "Paperback", "price": 18.50, "old_price": 22.00, "rating": 4.6, "isbn": "9781098765403"},
+            {"title": "Advanced SQL & Query Optimization", "author": "Elena Rostova", "category": "Computing", "format": "Paperback", "price": 14.99, "old_price": 19.99, "rating": 4.9, "isbn": "9781098765404"},
+            {"title": "PySpark Distributed Analytics", "author": "David Chen", "category": "Computing", "format": "Hardback", "price": 38.00, "old_price": 42.50, "rating": 4.5, "isbn": "9781098765405"},
+            {"title": "Medical Data Systems & Privacy", "author": "Dr. Rachel Adams", "category": "Medical", "format": "Hardback", "price": 62.00, "old_price": 75.00, "rating": 4.4, "isbn": "9781098765406"},
+            {"title": "Modern Biostatistics Fundamentals", "author": "James Thorne", "category": "Medical", "format": "Paperback", "price": 29.95, "old_price": 34.95, "rating": 4.3, "isbn": "9781098765407"},
+            {"title": "Leadership in Tech & Engineering", "author": "Claire Underwood", "category": "Business", "format": "Hardback", "price": 21.00, "old_price": 27.50, "rating": 4.8, "isbn": "9781098765408"},
+            {"title": "Financial Pipeline Automation", "author": "Robert Sterling", "category": "Finance", "format": "Paperback", "price": 32.50, "old_price": 40.00, "rating": 4.6, "isbn": "9781098765409"},
+            {"title": "DevOps & Data Infrastructure Guide", "author": "Vikram Patel", "category": "Technology", "format": "Paperback", "price": 19.99, "old_price": 24.99, "rating": 4.7, "isbn": "9781098765410"}
+        ]
+
+        dummy_rows = [feature_engineer_record(d) for d in dummy_templates]
+
+        # Get existing DataFrame or load
+        df = load_and_preprocess()
+
+        # Prepend dummy rows to existing dataset
+        df_new = pd.concat([pd.DataFrame(dummy_rows), df], ignore_index=True)
+        _DF_CACHE = df_new
+
+        # Save to Week 1 output directory & propagate to downstream databases
+        df_new.drop(columns=["img_path_raw"], errors="ignore").to_csv(WEEK1_PROCESSED_CSV, index=False)
+        execute_sqlite_etl(df_new, load_strategy="full")
+        init_week3_databases(df_new)
+
+        analysis  = analyze_df(df_new)
+        cat_stats = get_category_stats(df_new)
+        return jsonify(safe_json({
+            "success": True,
+            "message": f"Successfully added 10 synthetic dummy records to processed dataset! New total: {len(df_new):,} clean records.",
+            "added_count": len(dummy_rows),
+            "total_rows": len(df_new),
+            "analysis": analysis,
+            "cat_stats": cat_stats,
+            "eda_comparison": get_eda_comparison()
+        }))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 
 # ═══════════════════════════════════════════════

@@ -75,6 +75,9 @@ function initWeek1() {
   initWeek1TabSwitcher();
   initAddRecordForm();
   initRerunEDAScratch();
+  initRunFullPipeline();
+  initImportNewDataset();
+  initAdd10DummyRows();
 
   // Render preloaded charts
   const an = window.W1_ANALYSIS;
@@ -126,11 +129,184 @@ function initRerunEDAScratch() {
   });
 }
 
+function initRunFullPipeline() {
+  const btn = document.getElementById('btn-run-full-pipeline');
+  if (!btn) return;
+
+  btn.addEventListener('click', async () => {
+    const panel = document.getElementById('pipeline-result-panel');
+    const phasesEl = document.getElementById('pipeline-phases');
+    const msEl = document.getElementById('pipeline-total-ms');
+    const outputsCard = document.getElementById('pipeline-outputs-card');
+    const outputsList = document.getElementById('pipeline-outputs-list');
+
+    if (panel) panel.style.display = 'block';
+    if (phasesEl) phasesEl.innerHTML = `
+      <div style="color:var(--primary);font-size:0.85rem"><i class="fa-solid fa-spinner spinner"></i> Running all 4 pipeline phases — this may take 15-30 seconds...</div>`;
+    if (msEl) msEl.textContent = '';
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner spinner"></i> Running...';
+
+    try {
+      const res = await fetch('/api/run-full-pipeline', { method: 'POST' });
+      const d = await res.json();
+
+      if (d.error) {
+        if (phasesEl) phasesEl.innerHTML = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark"></i> ${d.error}</span>`;
+        return;
+      }
+
+      // Render each phase result
+      if (phasesEl) {
+        phasesEl.innerHTML = (d.phases || []).map(ph => `
+          <div style="display:flex;align-items:flex-start;gap:1rem;padding:0.75rem;background:var(--surface2);border-radius:6px;border-left:3px solid var(--secondary)">
+            <div style="min-width:28px;height:28px;border-radius:50%;background:var(--secondary);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem">${ph.phase}</div>
+            <div style="flex:1">
+              <div style="font-weight:700;font-size:0.88rem;color:var(--text)">${ph.name}</div>
+              <div style="font-size:0.75rem;color:var(--muted);margin-top:0.2rem">
+                ${ph.records?.toLocaleString()} records · ${ph.ms}ms
+              </div>
+              <div style="margin-top:0.4rem;display:flex;flex-direction:column;gap:0.2rem">
+                ${(ph.outputs || []).map(o => `<span style="font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:var(--secondary)"><i class="fa-solid fa-file-circle-check"></i> ${o}</span>`).join('')}
+              </div>
+            </div>
+            <span class="badge badge-green" style="font-size:0.7rem;white-space:nowrap"><i class="fa-solid fa-circle-check"></i> ${ph.status}</span>
+          </div>`
+        ).join('');
+      }
+
+      if (msEl) msEl.textContent = `Total: ${d.total_ms}ms`;
+
+      // Show outputs
+      if (outputsList && d.all_outputs?.length) {
+        outputsList.innerHTML = d.all_outputs.map(o => `<div>📄 ${o}</div>`).join('');
+        if (outputsCard) outputsCard.style.display = 'block';
+      }
+
+      // Refresh EDA charts with fresh analysis
+      if (d.analysis) {
+        window.W1_ANALYSIS = d.analysis;
+        renderEDACharts(d.analysis);
+      }
+
+    } catch (e) {
+      if (phasesEl) phasesEl.innerHTML = `<span class="badge badge-red">Pipeline failed: ${e.message}</span>`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-rocket"></i> Run Full Pipeline';
+    }
+  });
+}
+
+function initImportNewDataset() {
+  const fileInput = document.getElementById('import-dataset-file');
+  if (!fileInput) return;
+
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    const resultPanel = document.getElementById('import-result-panel');
+    const resultContent = document.getElementById('import-result-content');
+
+    if (resultPanel) resultPanel.style.display = 'block';
+    if (resultContent) resultContent.innerHTML = `<i class="fa-solid fa-spinner spinner"></i> Importing <strong>${file.name}</strong> and running full pipeline...`;
+
+    const fd = new FormData();
+    fd.append('file', file);
+
+    try {
+      const res = await fetch('/api/import-new-dataset', { method: 'POST', body: fd });
+      const d = await res.json();
+
+      if (d.error) {
+        if (resultContent) resultContent.innerHTML = `<span class="badge badge-red"><i class="fa-solid fa-circle-xmark"></i> ${d.error}</span>`;
+        return;
+      }
+
+      // Update active dataset name in header
+      const nameEl = document.getElementById('active-dataset-name');
+      const rowsEl = document.getElementById('active-rows');
+      if (nameEl) nameEl.textContent = d.filename;
+      if (rowsEl) rowsEl.textContent = d.rows?.toLocaleString();
+
+      if (resultContent) {
+        resultContent.innerHTML = `
+          <div class="kpi-grid" style="margin-bottom:1rem">
+            <div class="kpi-card green"><div class="kpi-icon green"><i class="fa-solid fa-circle-check"></i></div><div class="kpi-info"><label>Records Imported</label><div class="val green">${d.rows?.toLocaleString()}</div></div></div>
+            <div class="kpi-card blue"><div class="kpi-icon blue"><i class="fa-solid fa-columns"></i></div><div class="kpi-info"><label>Columns Detected</label><div class="val blue">${d.cols}</div></div></div>
+            <div class="kpi-card green"><div class="kpi-icon green"><i class="fa-solid fa-check-double"></i></div><div class="kpi-info"><label>Quality Checks Passed</label><div class="val green">${d.validation_passed}</div></div></div>
+            <div class="kpi-card amber"><div class="kpi-icon amber"><i class="fa-solid fa-triangle-exclamation"></i></div><div class="kpi-info"><label>Warnings</label><div class="val amber">${d.validation_warned}</div></div></div>
+          </div>
+          <div style="background:var(--surface2);border-radius:6px;padding:1rem;margin-top:0.5rem">
+            <div style="font-weight:700;font-size:0.82rem;color:var(--muted);margin-bottom:0.5rem"><i class="fa-solid fa-folder-open"></i> Output Files Created:</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:0.75rem;line-height:1.9;color:var(--secondary)">
+              ${(d.outputs || []).map(o => `<div>📄 ${o}</div>`).join('')}
+            </div>
+          </div>`;
+      }
+
+      // Refresh charts with new dataset analysis
+      if (d.analysis) {
+        window.W1_ANALYSIS = d.analysis;
+        renderEDACharts(d.analysis);
+      }
+
+    } catch (e) {
+      if (resultContent) resultContent.innerHTML = `<span class="badge badge-red">Import failed: ${e.message}</span>`;
+    }
+
+}
+
+function initAdd10DummyRows() {
+  const btn = document.getElementById('btn-add-10-dummy-rows');
+  const statusEl = document.getElementById('rerun-eda-status');
+  if (!btn) return;
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fa-solid fa-spinner spinner"></i> Adding 10 Dummy Rows...';
+    if (statusEl) statusEl.innerHTML = '<i class="fa-solid fa-spinner spinner"></i> Inserting 10 synthetic dummy book records...';
+
+    try {
+      const res = await fetch('/api/add-10-dummy-rows', { method: 'POST' });
+      const d = await res.json();
+
+      if (d.error) {
+        if (statusEl) statusEl.innerHTML = `<span class="badge badge-red">${d.error}</span>`;
+      } else {
+        if (statusEl) statusEl.innerHTML = `<span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> ${d.message}</span>`;
+
+        // Update row count display in KPIs & cards
+        const activeRowsEl = document.getElementById('active-rows');
+        const kpiRowsEl = document.getElementById('kpi-rows');
+        const afterRowsEl = document.getElementById('after-rows');
+
+        if (activeRowsEl) activeRowsEl.textContent = d.total_rows?.toLocaleString();
+        if (kpiRowsEl) kpiRowsEl.textContent = d.total_rows?.toLocaleString();
+        if (afterRowsEl) afterRowsEl.textContent = `${d.total_rows?.toLocaleString()} deduplicated rows`;
+
+        // Refresh EDA charts
+        if (d.analysis) {
+          window.W1_ANALYSIS = d.analysis;
+          renderEDACharts(d.analysis);
+        }
+      }
+    } catch (e) {
+      if (statusEl) statusEl.innerHTML = `<span class="badge badge-red">Failed to add dummy rows</span>`;
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fa-solid fa-plus-circle"></i> + Add 10 Dummy Rows to Processed CSV';
+    }
+  });
+}
+
 function initAddRecordForm() {
   const btn = document.getElementById('btn-add-record');
   const priceInp = document.getElementById('rec-price');
   const oldPriceInp = document.getElementById('rec-old-price');
   const ratingInp = document.getElementById('rec-rating');
+
 
   if (!btn) return;
 
