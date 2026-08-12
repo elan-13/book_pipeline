@@ -1,0 +1,357 @@
+{% extends "base.html" %}
+{% block title %}Ex 3 — Data Warehouse Design{% endblock %}
+{% block page_title %}Exercise 3 — Data Architecture &amp; Warehouse Design{% endblock %}
+{% block page_subtitle %}OLTP vs OLAP · Star &amp; Snowflake Schemas · Dimensional Modeling · Live SQL Queries{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h2>Data Architecture &amp; Dimensional Modelling</h2>
+  <p>Populated with real data from <strong>Week 1 Processed Dataset</strong>. Explore OLTP vs OLAP systems, Star and Snowflake schemas, and multi-dimensional Data Cubes.</p>
+</div>
+
+<!-- Input Connection from Week 1 -->
+<div class="card mb-4" style="background:var(--surface2);border-color:var(--primary)">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem">
+    <div>
+      <h3 style="font-size:0.95rem;font-weight:700;color:var(--text)"><i class="fa-solid fa-link" style="color:var(--primary)"></i> Input Source: Week 1 Processed Dataset</h3>
+      <p style="font-size:0.78rem;color:var(--muted);margin-top:0.2rem">Consuming the feature-engineered dataset generated in Week 1 (including newly added records) for 3NF relational normalization and Star/Snowflake dimensional schema modeling.</p>
+    </div>
+    <div>
+      <span class="badge badge-green" style="font-size:0.8rem;padding:0.5rem 1rem"><i class="fa-solid fa-circle-check"></i> Week 1 Pipeline Connected</span>
+    </div>
+  </div>
+</div>
+
+<!-- OLTP vs OLAP -->
+<div class="grid-2 mb-4">
+  <div class="card">
+    <div class="card-title" style="color:var(--primary)"><i class="fa-solid fa-database"></i> OLTP — Online Transaction Processing</div>
+    <div class="info-text" style="margin-bottom:1rem">
+      Designed for <strong>day-to-day transactional operations</strong>. Normalised schema (3NF) for fast inserts/updates.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:0.5rem">
+      <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Purpose</span><span>CRUD operations</span></div>
+      <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Schema</span><span>Normalised (3NF)</span></div>
+      <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Query Type</span><span>Simple, indexed lookups</span></div>
+      <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Data Volume</span><span>Gigabytes</span></div>
+      <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Example</span><span>Order entry system, banking app</span></div>
+      <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Optimised For</span><span>Write throughput</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title" style="color:var(--accent)"><i class="fa-solid fa-chart-pie"></i> OLAP — Online Analytical Processing</div>
+    <div class="info-text" style="margin-bottom:1rem">
+      Designed for <strong>complex analytical queries</strong> across large datasets. Denormalised schema for fast aggregations.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:0.5rem">
+      <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check" style="color:var(--accent)"></i><span class="check-type">Purpose</span><span>Analytics &amp; reporting</span></div>
+      <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check" style="color:var(--accent)"></i><span class="check-type">Schema</span><span>Star / Snowflake</span></div>
+      <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check" style="color:var(--accent)"></i><span class="check-type">Query Type</span><span>Complex aggregations, JOINs</span></div>
+      <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check" style="color:var(--accent)"></i><span class="check-type">Data Volume</span><span>Terabytes</span></div>
+      <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check" style="color:var(--accent)"></i><span class="check-type">Example</span><span>Data warehouse, BI dashboards</span></div>
+      <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check" style="color:var(--accent)"></i><span class="check-type">Optimised For</span><span>Read throughput</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Schema Tabs -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-diagram-project"></i> Dimensional Schema Diagrams</div>
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="star">⭐ Star Schema</button>
+    <button class="tab-btn" data-tab="snowflake">❄️ Snowflake Schema</button>
+  </div>
+
+  <!-- Star Schema -->
+  <div class="tab-panel active" id="tab-star">
+    <div class="schema-container">
+      <!-- Top dims -->
+      <div class="schema-row">
+        <div class="schema-table dim">
+          <div class="schema-table-header">dim_category</div>
+          <div class="schema-field"><span class="pk">PK</span> category_key INT</div>
+          <div class="schema-field">category_name VARCHAR</div>
+          <div class="schema-field">parent_category VARCHAR</div>
+        </div>
+        <div class="schema-table dim">
+          <div class="schema-table-header">dim_time</div>
+          <div class="schema-field"><span class="pk">PK</span> time_key INT</div>
+          <div class="schema-field">year INT</div>
+          <div class="schema-field">quarter VARCHAR</div>
+          <div class="schema-field">month INT</div>
+        </div>
+      </div>
+
+      <div class="schema-connector">↕</div>
+
+      <!-- Fact table -->
+      <div class="schema-row">
+        <div class="schema-table fact" style="min-width:220px">
+          <div class="schema-table-header">⭐ fact_book_sales</div>
+          <div class="schema-field"><span class="pk">PK</span> sale_id BIGINT</div>
+          <div class="schema-field"><span class="fk">FK</span> isbn VARCHAR(13)</div>
+          <div class="schema-field"><span class="fk">FK</span> category_key INT</div>
+          <div class="schema-field"><span class="fk">FK</span> publisher_key INT</div>
+          <div class="schema-field"><span class="fk">FK</span> format_key INT</div>
+          <div class="schema-field"><span class="fk">FK</span> time_key INT</div>
+          <div class="schema-field">price DECIMAL(10,2)</div>
+          <div class="schema-field">old_price DECIMAL(10,2)</div>
+          <div class="schema-field">discount DECIMAL(10,2)</div>
+          <div class="schema-field">rating FLOAT</div>
+        </div>
+      </div>
+
+      <div class="schema-connector">↕</div>
+
+      <!-- Bottom dims -->
+      <div class="schema-row">
+        <div class="schema-table dim">
+          <div class="schema-table-header">dim_publisher</div>
+          <div class="schema-field"><span class="pk">PK</span> publisher_key INT</div>
+          <div class="schema-field">publisher_name VARCHAR</div>
+          <div class="schema-field">region VARCHAR</div>
+        </div>
+        <div class="schema-table dim">
+          <div class="schema-table-header">dim_format</div>
+          <div class="schema-field"><span class="pk">PK</span> format_key INT</div>
+          <div class="schema-field">format_name VARCHAR</div>
+        </div>
+      </div>
+    </div>
+    <p class="info-text" style="text-align:center;margin-top:0.75rem">
+      <strong>Star Schema</strong> — One central fact table connected directly to denormalised dimension tables. Optimal for query performance.
+    </p>
+  </div>
+
+  <!-- Snowflake Schema -->
+  <div class="tab-panel" id="tab-snowflake">
+    <div class="schema-container">
+      <div class="schema-row">
+        <div class="schema-table dim">
+          <div class="schema-table-header">dim_category</div>
+          <div class="schema-field"><span class="pk">PK</span> category_key INT</div>
+          <div class="schema-field">category_name VARCHAR</div>
+          <div class="schema-field"><span class="fk">FK</span> genre_key INT</div>
+        </div>
+        <div class="schema-table dim-sub">
+          <div class="schema-table-header">dim_genre</div>
+          <div class="schema-field"><span class="pk">PK</span> genre_key INT</div>
+          <div class="schema-field">genre_name VARCHAR</div>
+          <div class="schema-field">description TEXT</div>
+        </div>
+      </div>
+      <div class="schema-connector">↕</div>
+      <div class="schema-row">
+        <div class="schema-table fact">
+          <div class="schema-table-header">⭐ fact_book_sales</div>
+          <div class="schema-field"><span class="pk">PK</span> sale_id BIGINT</div>
+          <div class="schema-field"><span class="fk">FK</span> category_key INT</div>
+          <div class="schema-field"><span class="fk">FK</span> publisher_key INT</div>
+          <div class="schema-field"><span class="fk">FK</span> format_key INT</div>
+          <div class="schema-field"><span class="fk">FK</span> time_key INT</div>
+          <div class="schema-field">price DECIMAL(10,2)</div>
+          <div class="schema-field">rating FLOAT</div>
+        </div>
+      </div>
+      <div class="schema-connector">↕</div>
+      <div class="schema-row">
+        <div class="schema-table dim">
+          <div class="schema-table-header">dim_publisher</div>
+          <div class="schema-field"><span class="pk">PK</span> publisher_key INT</div>
+          <div class="schema-field">publisher_name VARCHAR</div>
+          <div class="schema-field"><span class="fk">FK</span> region_key INT</div>
+        </div>
+        <div class="schema-table dim-sub">
+          <div class="schema-table-header">dim_region</div>
+          <div class="schema-field"><span class="pk">PK</span> region_key INT</div>
+          <div class="schema-field">region_name VARCHAR</div>
+          <div class="schema-field">country VARCHAR</div>
+        </div>
+      </div>
+    </div>
+    <p class="info-text" style="text-align:center;margin-top:0.75rem">
+      <strong>Snowflake Schema</strong> — Normalised dimension tables (dim_publisher → dim_region, dim_category → dim_genre). Saves storage but requires more JOINs.
+    </p>
+  </div>
+</div>
+
+<!-- Example Dimension Tables from real data -->
+<div class="section-header mt-4">
+  <h2>Example Dimension Tables (Real Data)</h2>
+  <p>Populated from <code>cleaned_books.csv</code> by the Flask backend.</p>
+</div>
+
+<div class="grid-2 mb-4">
+  <div class="card">
+    <div class="card-title"><i class="fa-solid fa-tag"></i> dim_category</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>category_key</th><th>category_name</th><th>parent_category</th></tr></thead>
+        <tbody>
+          {% for row in schema.dim_category %}
+          <tr><td class="font-mono">{{ row.category_key }}</td><td>{{ row.category_name }}</td><td>{{ row.parent_category }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><i class="fa-solid fa-building"></i> dim_publisher</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>publisher_key</th><th>publisher_name</th><th>region</th></tr></thead>
+        <tbody>
+          {% for row in schema.dim_publisher %}
+          <tr><td class="font-mono">{{ row.publisher_key }}</td><td>{{ row.publisher_name }}</td><td>{{ row.region }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+  <div class="card">
+    <div class="card-title"><i class="fa-solid fa-book-open"></i> dim_format</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>format_key</th><th>format_name</th></tr></thead>
+        <tbody>
+          {% for row in schema.dim_format %}
+          <tr><td class="font-mono">{{ row.format_key }}</td><td>{{ row.format_name }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><i class="fa-solid fa-calendar"></i> dim_time</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>time_key</th><th>year</th><th>quarter</th><th>month</th></tr></thead>
+        <tbody>
+          {% for row in schema.dim_time %}
+          <tr><td class="font-mono">{{ row.time_key }}</td><td>{{ row.year }}</td><td>{{ row.quarter }}</td><td>{{ row.month }}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Fact Table -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-star"></i> fact_book_sales (Sample Rows)</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>isbn</th><th>category_key</th><th>publisher_key</th><th>format_key</th><th>time_key</th><th>price</th><th>rating</th><th>discount</th></tr></thead>
+      <tbody>
+        {% for row in schema.fact_book_sales %}
+        <tr>
+          <td class="font-mono">{{ row.isbn }}</td>
+          <td class="font-mono">{{ row.category_key }}</td>
+          <td class="font-mono">{{ row.publisher_key }}</td>
+          <td class="font-mono">{{ row.format_key }}</td>
+          <td class="font-mono">{{ row.time_key }}</td>
+          <td><span class="badge badge-purple">${{ row.price }}</span></td>
+          <td><span class="badge badge-green">{{ row.rating }}★</span></td>
+          <td><span class="badge badge-amber">${{ row.discount }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Data Cube -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-cube"></i> Data Cube — Multi-dimensional Analysis (Category × Format × Region)</div>
+  <div class="cube-filters">
+    <select id="cube-cat">
+      <option value="ALL">All Categories</option>
+      {% for c in cube.categories %}<option>{{ c }}</option>{% endfor %}
+    </select>
+    <select id="cube-fmt">
+      <option value="ALL">All Formats</option>
+      {% for f in cube.formats %}<option>{{ f }}</option>{% endfor %}
+    </select>
+    <select id="cube-reg">
+      <option value="ALL">All Regions</option>
+      {% for r in cube.regions %}<option>{{ r }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Category</th><th>Format</th><th>Region</th><th>Count</th><th>Avg Price</th><th>Avg Rating</th></tr></thead>
+      <tbody id="cube-tbody">
+        {% for row in cube.cube %}
+        <tr data-cat="{{ row.category }}" data-fmt="{{ row.format }}" data-reg="{{ row.region }}">
+          <td>{{ row.category }}</td>
+          <td><span class="badge badge-blue">{{ row.format }}</span></td>
+          <td>{{ row.region }}</td>
+          <td>{{ row.count }}</td>
+          <td><span class="badge badge-purple">${{ row.avg_price }}</span></td>
+          <td><span class="badge badge-green">{{ row.avg_rating }}★</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- LIVE INTERACTIVE OLAP QUERY ENGINE -->
+<div class="card mb-4 mt-4" style="border-color:var(--primary)">
+  <div class="card-title" style="justify-content:space-between">
+    <span><i class="fa-solid fa-terminal" style="color:var(--primary)"></i> Interactive OLAP Analytical Query Engine (Target: delab_books.db)</span>
+    <span class="badge badge-green"><i class="fa-solid fa-bolt"></i> Live SQLite Execution</span>
+  </div>
+  <p class="info-text mb-4">Execute multi-dimensional OLAP operations (<strong>SLICE</strong>, <strong>DICE</strong>, <strong>ROLLUP</strong>, <strong>DRILLDOWN</strong>) live against table <code>books_etl_fact</code> in local database <code>delab_books.db</code>.</p>
+
+  <div style="display:flex;gap:0.75rem;margin-bottom:1.25rem;flex-wrap:wrap;align-items:center">
+    <button type="button" class="btn badge badge-blue olap-btn active" data-op="slice" style="font-size:0.85rem;padding:0.6rem 1.1rem;cursor:pointer;border:none">
+      <i class="fa-solid fa-scissors"></i> SLICE (Category = 'Computing')
+    </button>
+    <button type="button" class="btn badge badge-purple olap-btn" data-op="dice" style="font-size:0.85rem;padding:0.6rem 1.1rem;cursor:pointer;border:none">
+      <i class="fa-solid fa-dice-d6"></i> DICE (Multi-Dimension Filter)
+    </button>
+    <button type="button" class="btn badge badge-green olap-btn" data-op="rollup" style="font-size:0.85rem;padding:0.6rem 1.1rem;cursor:pointer;border:none">
+      <i class="fa-solid fa-arrow-up-wide-short"></i> ROLLUP (Category Revenue)
+    </button>
+    <button type="button" class="btn badge badge-amber olap-btn" data-op="drilldown" style="font-size:0.85rem;padding:0.6rem 1.1rem;cursor:pointer;border:none">
+      <i class="fa-solid fa-arrow-down-short-wide"></i> DRILLDOWN (ISBN Detail)
+    </button>
+  </div>
+
+  <!-- Executed SQL Code Preview -->
+  <div style="background:#090d13;border:1px solid rgba(255,255,255,0.1);border-radius:var(--radius-sm);padding:1rem;margin-bottom:1rem;font-family:var(--mono);font-size:0.8rem;color:#7ee787">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;color:var(--muted);font-size:0.72rem;text-transform:uppercase">
+      <span><i class="fa-solid fa-code"></i> Executed SQL Statement</span>
+      <span><span id="olap-exec-time">0.45ms</span> · <span id="olap-row-count">10 rows</span></span>
+    </div>
+    <pre id="olap-sql-preview" style="margin:0;white-space:pre-wrap;color:#e6edf3">SELECT category, format, COUNT(*) as book_count, ROUND(AVG(price), 2) as avg_price_usd FROM books_etl_fact WHERE category = 'Computing' GROUP BY category, format;</pre>
+  </div>
+
+  <!-- Result Table -->
+  <div class="table-wrap">
+    <table id="olap-results-table">
+      <thead id="olap-thead">
+        <tr>
+          {% for col in olap_initial.columns %}
+          <th>{{ col }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody id="olap-tbody">
+        {% for row in olap_initial.rows %}
+        <tr>
+          {% for col in olap_initial.columns %}
+          <td class="font-mono">{{ row[col] }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

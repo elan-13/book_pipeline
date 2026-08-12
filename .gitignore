@@ -1,0 +1,24 @@
+# Large datasets and outputs
+main_dataset.csv
+outputs/
+cleaned_books.csv
+category_statistics.csv
+*.db
+book-covers/
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# IDE and System Files
+.vscode/
+.idea/
+.DS_Store
+*.log

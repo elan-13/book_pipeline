@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+{% block title %}Ex 2 — ETL Pipeline{% endblock %}
+{% block page_title %}Exercise 2 — ETL Pipeline{% endblock %}
+{% block page_subtitle %}Step-by-step Extract · Transform · Load with live terminal output{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h2>ETL Pipeline — Click Each Step to Execute</h2>
+  <p>This exercise demonstrates a complete Extract → Transform → Load pipeline run on the books dataset. Click each step button in order and observe the live results.</p>
+</div>
+
+<!-- Input: Week 1 Dataset badge -->
+<div class="card mb-4" style="background:var(--surface2);border-color:var(--primary)">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem">
+    <div>
+      <h3 style="font-size:0.95rem;font-weight:700;color:var(--text)"><i class="fa-solid fa-link" style="color:var(--primary)"></i> Input: Week 1 Processed Dataset (main_dataset.csv)</h3>
+      <p style="font-size:0.78rem;color:var(--muted);margin-top:0.2rem">The feature-engineered 19-column dataset generated in Exercise 1 is the source for this pipeline.</p>
+    </div>
+    <span class="badge badge-green" style="font-size:0.8rem;padding:0.5rem 1rem"><i class="fa-solid fa-circle-check"></i> Ex 1 → Ex 2 Connected</span>
+  </div>
+</div>
+
+<!-- ETL Flow Architecture -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-arrows-spin"></i> ETL Pipeline Architecture</div>
+  <div class="etl-flow">
+    <div class="etl-phase extract">
+      <div class="phase-icon"><i class="fa-solid fa-database"></i></div>
+      <h3>EXTRACT</h3>
+      <p>Read from Source</p>
+      <div style="margin-top:1rem;display:flex;flex-direction:column;gap:0.4rem">
+        <span class="badge badge-blue"><i class="fa-solid fa-file-csv"></i> main_dataset.csv</span>
+        <span class="badge badge-blue">32,583 raw rows</span>
+        <span class="badge badge-blue">11 original columns</span>
+      </div>
+    </div>
+    <div class="etl-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+
+    <div class="etl-phase transform">
+      <div class="phase-icon"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+      <h3>TRANSFORM</h3>
+      <p>Cleanse &amp; Enrich</p>
+      <div style="margin-top:1rem;display:flex;flex-direction:column;gap:0.4rem">
+        <span class="badge badge-purple">Null Imputation</span>
+        <span class="badge badge-purple">Deduplication</span>
+        <span class="badge badge-purple">Feature Engineering</span>
+        <span class="badge badge-purple">+8 Derived Columns</span>
+      </div>
+    </div>
+    <div class="etl-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+
+    <div class="etl-phase load">
+      <div class="phase-icon"><i class="fa-solid fa-warehouse"></i></div>
+      <h3>LOAD</h3>
+      <p>Write to Target DB</p>
+      <div style="margin-top:1rem;display:flex;flex-direction:column;gap:0.4rem">
+        <span class="badge badge-green">SQLite (week2_etl.db)</span>
+        <span class="badge badge-green">books_etl_fact table</span>
+        <span class="badge badge-green">Full / Incremental</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ STEP-BY-STEP EXECUTION PANEL ═══ -->
+<div class="section-header mt-4">
+  <h2>Step-by-Step Pipeline Execution</h2>
+  <p>Click each button in sequence. Step 2 unlocks after Step 1. Step 3 unlocks after Step 2.</p>
+</div>
+
+<!-- Three Step Buttons -->
+<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.25rem">
+
+  <!-- Step 1: Extract -->
+  <div class="card" style="border-color:var(--primary);text-align:center;padding:1.25rem">
+    <div style="font-size:2rem;margin-bottom:0.5rem;color:var(--primary)"><i class="fa-solid fa-database"></i></div>
+    <div style="font-weight:700;font-size:1rem;color:var(--primary);margin-bottom:0.3rem">Step 1 — EXTRACT</div>
+    <p style="font-size:0.75rem;color:var(--muted);margin-bottom:1rem">Read raw CSV from disk. Detect schema, count nulls &amp; duplicates.</p>
+    <div id="step1-status" style="min-height:1.5rem;margin-bottom:0.75rem"></div>
+    <button id="btn-extract" class="btn badge-blue" style="width:100%;padding:0.7rem;cursor:pointer;border:none;border-radius:6px;font-weight:700;font-size:0.85rem">
+      <i class="fa-solid fa-play"></i> Run Extract
+    </button>
+  </div>
+
+  <!-- Step 2: Transform -->
+  <div class="card" style="border-color:var(--accent);text-align:center;padding:1.25rem;opacity:0.55" id="step2-card">
+    <div style="font-size:2rem;margin-bottom:0.5rem;color:var(--accent)"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+    <div style="font-weight:700;font-size:1rem;color:var(--accent);margin-bottom:0.3rem">Step 2 — TRANSFORM</div>
+    <p style="font-size:0.75rem;color:var(--muted);margin-bottom:1rem">Clean nulls, remove duplicates, engineer 8 new features &amp; bin categories.</p>
+    <div id="step2-status" style="min-height:1.5rem;margin-bottom:0.75rem"></div>
+    <button id="btn-transform" class="btn badge-purple" style="width:100%;padding:0.7rem;cursor:pointer;border:none;border-radius:6px;font-weight:700;font-size:0.85rem" disabled>
+      <i class="fa-solid fa-wand-magic-sparkles"></i> Run Transform
+    </button>
+  </div>
+
+  <!-- Step 3: Load -->
+  <div class="card" style="border-color:var(--secondary);text-align:center;padding:1.25rem;opacity:0.55" id="step3-card">
+    <div style="font-size:2rem;margin-bottom:0.5rem;color:var(--secondary)"><i class="fa-solid fa-warehouse"></i></div>
+    <div style="font-weight:700;font-size:1rem;color:var(--secondary);margin-bottom:0.3rem">Step 3 — LOAD</div>
+    <p style="font-size:0.75rem;color:var(--muted);margin-bottom:1rem">Write transformed records to SQLite target database with Full or Incremental strategy.</p>
+    <div id="step3-status" style="min-height:1.5rem;margin-bottom:0.75rem">
+      <select id="load-strategy-select" style="width:100%;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:0.3rem;font-size:0.8rem;margin-bottom:0.5rem">
+        <option value="full">Full Load (overwrite)</option>
+        <option value="incremental">Incremental (upsert)</option>
+      </select>
+    </div>
+    <button id="btn-load" class="btn badge-green" style="width:100%;padding:0.7rem;cursor:pointer;border:none;border-radius:6px;font-weight:700;font-size:0.85rem" disabled>
+      <i class="fa-solid fa-database"></i> Run Load
+    </button>
+  </div>
+</div>
+
+<!-- Live Terminal Output -->
+<div class="card mb-4">
+  <div class="card-title" style="justify-content:space-between">
+    <span><i class="fa-solid fa-terminal" style="color:var(--accent)"></i> Live Pipeline Terminal Output</span>
+    <button id="btn-clear-terminal" style="background:none;border:1px solid var(--border);color:var(--muted);font-size:0.72rem;padding:0.25rem 0.6rem;border-radius:4px;cursor:pointer">
+      <i class="fa-solid fa-eraser"></i> Clear
+    </button>
+  </div>
+  <div id="etl-terminal" style="background:#0a1628;border:1px solid #1e2d45;border-radius:6px;padding:1rem;font-family:'JetBrains Mono',monospace;font-size:0.75rem;line-height:1.7;color:#a8c5e8;min-height:200px;max-height:340px;overflow-y:auto">
+    <span style="color:#5a7a9a">$ Ready — Click "Run Extract" to start the pipeline...</span>
+  </div>
+</div>
+
+<!-- KPI metrics (shown after steps complete) -->
+<div id="etl-kpi-row" class="kpi-grid mb-4" style="display:none">
+  <div class="kpi-card blue"><div class="kpi-icon blue"><i class="fa-solid fa-file-import"></i></div>
+    <div class="kpi-info"><label>Extracted Rows</label><div class="val blue" id="kpi-extracted">—</div></div>
+  </div>
+  <div class="kpi-card purple"><div class="kpi-icon purple"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+    <div class="kpi-info"><label>After Transform</label><div class="val purple" id="kpi-transformed">—</div></div>
+  </div>
+  <div class="kpi-card green"><div class="kpi-icon green"><i class="fa-solid fa-database"></i></div>
+    <div class="kpi-info"><label>Loaded to DB</label><div class="val green" id="kpi-loaded">—</div></div>
+  </div>
+  <div class="kpi-card amber"><div class="kpi-icon amber"><i class="fa-solid fa-stopwatch"></i></div>
+    <div class="kpi-info"><label>Total Time (ms)</label><div class="val amber" id="kpi-etl-ms">—</div></div>
+  </div>
+</div>
+
+<!-- Transform Preview Table (shown after transform) -->
+<div id="transform-preview-card" class="card mb-4" style="display:none">
+  <div class="card-title"><i class="fa-solid fa-table" style="color:var(--accent)"></i> Transformed Data Preview (First 5 Records)</div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr id="transform-preview-head"></tr></thead>
+      <tbody id="transform-preview-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- CDC Section -->
+<div class="section-header mt-4">
+  <h2>Change Data Capture (CDC)</h2>
+  <p>CDC tracks what changed between two pipeline runs — new records (INSERT), updated values (UPDATE), and removed entries (DELETE). Upload two CSV snapshots to compare.</p>
+</div>
+
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-code-compare"></i> Compare Two CSV Snapshots</div>
+  <div class="grid-2">
+    <div>
+      <label style="font-size:0.8rem;color:var(--muted);font-weight:600">PREVIOUS Snapshot (Old)</label>
+      <input type="file" id="cdc-old-file" accept=".csv" style="display:block;margin-top:0.4rem;width:100%;background:var(--surface2);color:var(--text);padding:0.5rem;border-radius:4px;border:1px solid var(--border)">
+    </div>
+    <div>
+      <label style="font-size:0.8rem;color:var(--muted);font-weight:600">CURRENT Snapshot (New)</label>
+      <input type="file" id="cdc-new-file" accept=".csv" style="display:block;margin-top:0.4rem;width:100%;background:var(--surface2);color:var(--text);padding:0.5rem;border-radius:4px;border:1px solid var(--border)">
+    </div>
+  </div>
+  <div style="margin-top:0.75rem;display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+    <div>
+      <label style="font-size:0.8rem;color:var(--muted);font-weight:600">Key Column</label>
+      <input type="text" id="cdc-key-col" value="isbn" placeholder="isbn" style="display:block;margin-top:0.3rem;background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:0.4rem 0.7rem;font-size:0.82rem;width:150px">
+    </div>
+    <div style="align-self:flex-end">
+      <button id="btn-cdc" class="btn badge-blue" style="padding:0.5rem 1.2rem;border:none;border-radius:6px;font-weight:700;cursor:pointer;font-size:0.85rem">
+        <i class="fa-solid fa-bolt"></i> Run CDC
+      </button>
+    </div>
+  </div>
+  <div id="cdc-result" style="margin-top:1rem"></div>
+</div>
+
+<!-- DB Status Section -->
+<div class="section-header mt-4">
+  <h2>Target Database Status</h2>
+  <p>Live status of the SQLite database (<code>outputs/week2/week2_etl.db</code>) after the Load step completes.</p>
+</div>
+
+<div class="kpi-grid mb-4">
+  <div class="kpi-card green"><div class="kpi-icon green"><i class="fa-solid fa-check-double"></i></div>
+    <div class="kpi-info"><label>Fact Records</label><div class="val green" id="db-fact-cnt">{{ sqlite_status.fact_records | default(0) }}</div></div>
+  </div>
+  <div class="kpi-card blue"><div class="kpi-icon blue"><i class="fa-solid fa-list-check"></i></div>
+    <div class="kpi-info"><label>Execution Logs</label><div class="val blue" id="db-log-cnt">{{ sqlite_status.log_records | default(0) }}</div></div>
+  </div>
+  <div class="kpi-card purple"><div class="kpi-icon purple"><i class="fa-solid fa-hard-drive"></i></div>
+    <div class="kpi-info"><label>DB Size (KB)</label><div class="val purple">{{ sqlite_status.db_size_kb | default(0) }}</div></div>
+  </div>
+  <div class="kpi-card amber"><div class="kpi-icon amber"><i class="fa-solid fa-file-contract"></i></div>
+    <div class="kpi-info"><label>CDC Audit Events</label><div class="val amber">{{ sqlite_status.cdc_records | default(0) }}</div></div>
+  </div>
+</div>
+
+<!-- DB Sample Query -->
+{% if sqlite_status and sqlite_status.sample_rows %}
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-magnifying-glass"></i> Live DB Query — books_etl_fact (Last 10 Records)</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>ISBN</th><th>Title</th><th>Author</th><th>Category</th><th>Price $</th><th>Rating</th><th>Discount %</th><th>Bestseller</th></tr>
+      </thead>
+      <tbody>
+        {% for r in sqlite_status.sample_rows %}
+        <tr>
+          <td class="font-mono" style="font-size:0.75rem">{{ r.isbn }}</td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis">{{ r.title }}</td>
+          <td>{{ r.author }}</td>
+          <td><span class="badge badge-blue" style="font-size:0.65rem">{{ r.category }}</span></td>
+          <td><b>${{ r.price }}</b></td>
+          <td>{{ r.rating }} ★</td>
+          <td>{{ r.discount_pct }}%</td>
+          <td>{% if r.is_bestseller %}<span class="badge badge-green">★ Yes</span>{% else %}<span class="badge" style="background:var(--surface2)">No</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

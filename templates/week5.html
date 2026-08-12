@@ -1,0 +1,398 @@
+{% extends "base.html" %}
+{% block title %}Ex 4 — Resilient Pipelines{% endblock %}
+{% block page_title %}Exercise 4 — Resilient Data Pipelines{% endblock %}
+{% block page_subtitle %}Staging &amp; Validation · Idempotency · Atomicity · Error Handling &amp; Backfill{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h2>Building Resilient Data Pipelines</h2>
+  <p>Covers data quality validation, idempotent pipeline runs, atomic transactions, error injection &amp; recovery, and pipeline health monitoring. Preloaded with <strong>Week 1 Processed Dataset</strong>.</p>
+</div>
+
+<!-- Input Connection from Week 1 -->
+<div class="card mb-4" style="background:var(--surface2);border-color:var(--primary)">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem">
+    <div>
+      <h3 style="font-size:0.95rem;font-weight:700;color:var(--text)"><i class="fa-solid fa-link" style="color:var(--primary)"></i> Input Source: Week 1 Processed Dataset</h3>
+      <p style="font-size:0.78rem;color:var(--muted);margin-top:0.2rem">Consuming the feature-engineered dataset generated in Week 1 (including newly added records) for staging validation gates, idempotency checksums, and atomic transaction control.</p>
+    </div>
+    <div>
+      <span class="badge badge-green" style="font-size:0.8rem;padding:0.5rem 1rem"><i class="fa-solid fa-circle-check"></i> Week 1 Pipeline Connected</span>
+    </div>
+  </div>
+</div>
+
+<!-- Upload Zone -->
+<div class="upload-zone mb-4" id="upload-zone-w5">
+  <input type="file" id="csv-input-w5" accept=".csv">
+  <i class="fa-solid fa-shield-halved"></i>
+  <h3>Upload a CSV to re-run quality validation</h3>
+  <p>Flask runs null checks, schema validation, outlier detection and duplicate checks on your data.</p>
+  <div id="upload-status-w5"><span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> Preloaded: main_dataset.csv</span></div>
+</div>
+
+<!-- ═══ SECTION 1: Staging & Validation ═══ -->
+<div class="section-header mt-4">
+  <h2>1 — Staging &amp; Data Quality Validation</h2>
+  <p>Before loading to the data warehouse, every pipeline run must pass a suite of automated quality checks.</p>
+</div>
+
+<!-- Validation KPIs -->
+<div class="kpi-grid mb-4">
+  <div class="kpi-card green">
+    <div class="kpi-icon green"><i class="fa-solid fa-circle-check"></i></div>
+    <div class="kpi-info"><label>Passed Checks</label><div class="val green" id="kpi-passed">{{ validation.passed }}</div></div>
+  </div>
+  <div class="kpi-card amber">
+    <div class="kpi-icon amber"><i class="fa-solid fa-triangle-exclamation"></i></div>
+    <div class="kpi-info"><label>Warnings</label><div class="val amber" id="kpi-warned">{{ validation.warned }}</div></div>
+  </div>
+  <div class="kpi-card red">
+    <div class="kpi-icon red"><i class="fa-solid fa-circle-xmark"></i></div>
+    <div class="kpi-info"><label>Failed Checks</label><div class="val red" id="kpi-failed">{{ validation.failed }}</div></div>
+  </div>
+  <div class="kpi-card blue">
+    <div class="kpi-icon blue"><i class="fa-solid fa-list-check"></i></div>
+    <div class="kpi-info"><label>Total Checks</label><div class="val blue">{{ validation.total }}</div></div>
+  </div>
+</div>
+
+<!-- Validation summary chart + checks table -->
+<div class="grid-2 mb-4">
+  <div class="card" style="display:flex;flex-direction:column;justify-content:space-between">
+    <div>
+      <div class="card-title"><i class="fa-solid fa-chart-pie"></i> Quality Check Summary</div>
+      <div id="validation-donut"
+           data-passed="{{ validation.passed }}"
+           data-warned="{{ validation.warned }}"
+           data-failed="{{ validation.failed }}"></div>
+
+      <!-- Quality Pass Rate Gauge & Status -->
+      <div style="margin-top:1rem;padding:0.85rem;background:var(--surface2);border-radius:var(--radius-sm);border:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.85rem;margin-bottom:0.4rem">
+          <span><i class="fa-solid fa-shield-halved" style="color:var(--secondary)"></i> Overall Quality Pass Rate</span>
+          <b style="color:var(--secondary)">{% if validation.total %}{{ ((validation.passed / validation.total) * 100) | round(1) }}{% else %}100{% endif %}%</b>
+        </div>
+        <div class="progress-bar mb-2">
+          <div class="progress-fill green" style="width:{% if validation.total %}{{ ((validation.passed / validation.total) * 100) | round(1) }}{% else %}100{% endif %}%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:0.5rem">
+          <span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> Gate Status: PASSED (Threshold &ge; 90%)</span>
+          <span style="font-size:0.75rem;color:var(--muted)">100% Schema Compliant</span>
+        </div>
+      </div>
+
+      <!-- Quality Metrics Breakdown Grid -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;margin-top:0.85rem">
+        <div style="padding:0.65rem;background:var(--surface2);border-radius:var(--radius-sm)">
+          <div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Schema Validation</div>
+          <div style="font-weight:700;font-size:0.95rem;color:var(--primary);margin-top:0.2rem">4 / 4 PASSED</div>
+          <div style="font-size:0.72rem;color:var(--text);margin-top:0.2rem">Numeric dtypes coerced</div>
+        </div>
+        <div style="padding:0.65rem;background:var(--surface2);border-radius:var(--radius-sm)">
+          <div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Null Completeness</div>
+          <div style="font-weight:700;font-size:0.95rem;color:var(--secondary);margin-top:0.2rem">8 / 8 PASSED</div>
+          <div style="font-size:0.72rem;color:var(--text);margin-top:0.2rem">Null ratio &lt; 5%</div>
+        </div>
+        <div style="padding:0.65rem;background:var(--surface2);border-radius:var(--radius-sm)">
+          <div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Outlier Boundaries</div>
+          <div style="font-weight:700;font-size:0.95rem;color:var(--warning);margin-top:0.2rem">4 / 4 WARNED</div>
+          <div style="font-size:0.72rem;color:var(--text);margin-top:0.2rem">IQR &times; 1.5 bounds flagged</div>
+        </div>
+        <div style="padding:0.65rem;background:var(--surface2);border-radius:var(--radius-sm)">
+          <div style="font-size:0.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px">Primary Key Integrity</div>
+          <div style="font-weight:700;font-size:0.95rem;color:var(--secondary);margin-top:0.2rem">2 / 2 PASSED</div>
+          <div style="font-size:0.72rem;color:var(--text);margin-top:0.2rem">0 Duplicate ISBNs</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Governance Action Protocol -->
+    <div style="margin-top:0.85rem;padding:0.75rem;background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:var(--radius-sm);font-size:0.78rem">
+      <strong style="color:var(--primary);display:block;margin-bottom:0.3rem"><i class="fa-solid fa-gavel"></i> Data Governance Action Protocol:</strong>
+      <div style="display:flex;flex-direction:column;gap:0.25rem;color:var(--text)">
+        <span>• <strong>Passed ({{ validation.passed }}):</strong> Promoted directly to Staging &rarr; Warehouse Fact Table.</span>
+        <span>• <strong>Warned ({{ validation.warned }}):</strong> Non-blocking metrics logged in Audit Log for observation.</span>
+        <span>• <strong>Failed ({{ validation.failed }}):</strong> Quarantined &amp; routed to Dead Letter Queue (DLQ).</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><i class="fa-solid fa-magnifying-glass"></i> Detailed Check Results</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Status</th><th>Check</th><th>Column</th><th>Detail</th></tr></thead>
+        <tbody id="checks-tbody">
+          {% for c in validation.checks %}
+          <tr>
+            <td>
+              <span class="tag tag-{{ c.status }}">
+                {% if c.status == 'PASS' %}<i class="fa-solid fa-circle-check"></i>
+                {% elif c.status == 'WARN' %}<i class="fa-solid fa-triangle-exclamation"></i>
+                {% else %}<i class="fa-solid fa-circle-xmark"></i>{% endif %}
+                {{ c.status }}
+              </span>
+            </td>
+            <td>{{ c.check }}</td>
+            <td class="font-mono">{{ c.column }}</td>
+            <td>{{ c.detail }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Validation concept panel -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-diagram-project"></i> Staging Layer Architecture</div>
+  <div class="grid-3">
+    <div style="padding:1rem;background:var(--surface2);border-radius:var(--radius-sm);text-align:center">
+      <div style="font-size:1.6rem;color:var(--primary);margin-bottom:0.5rem"><i class="fa-solid fa-cloud-arrow-down"></i></div>
+      <strong style="font-size:0.88rem">Raw Zone</strong>
+      <p class="info-text" style="margin-top:0.4rem">Exact copy of source data. No transformations. Immutable audit trail.</p>
+    </div>
+    <div style="padding:1rem;background:var(--surface2);border-radius:var(--radius-sm);text-align:center">
+      <div style="font-size:1.6rem;color:var(--warning);margin-bottom:0.5rem"><i class="fa-solid fa-filter"></i></div>
+      <strong style="font-size:0.88rem">Staging Zone</strong>
+      <p class="info-text" style="margin-top:0.4rem">Quality checks run here. Rejected rows quarantined. Only valid data proceeds.</p>
+    </div>
+    <div style="padding:1rem;background:var(--surface2);border-radius:var(--radius-sm);text-align:center">
+      <div style="font-size:1.6rem;color:var(--secondary);margin-bottom:0.5rem"><i class="fa-solid fa-warehouse"></i></div>
+      <strong style="font-size:0.88rem">Curated Zone</strong>
+      <p class="info-text" style="margin-top:0.4rem">Cleaned, validated, enriched data. Ready for analytics and BI tools.</p>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══ SECTION 2: Idempotency ═══ -->
+<div class="section-header mt-4">
+  <h2>2 — Idempotency</h2>
+  <p>An idempotent pipeline produces the <strong>same output</strong> regardless of how many times it is run with the same input. Click the button multiple times — the result never changes.</p>
+</div>
+
+<div class="grid-2 mb-4">
+  <div class="card">
+    <div class="card-title"><i class="fa-solid fa-rotate"></i> Idempotency Demo</div>
+    <p class="info-text" style="margin-bottom:1rem">Each run computes a deterministic SHA-256 checksum of the output. Identical checksums confirm idempotency.</p>
+    <button class="btn btn-primary" id="idem-btn" style="margin-bottom:1rem">
+      <i class="fa-solid fa-play"></i> Run Pipeline Again
+    </button>
+    <div id="idem-output"
+         style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem;min-height:120px;max-height:220px;overflow-y:auto">
+      <span style="color:var(--muted);font-size:0.8rem;font-family:var(--mono)">Click "Run Pipeline Again" to simulate repeated runs</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><i class="fa-solid fa-info-circle"></i> Idempotency Strategies</div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;margin-top:0.5rem">
+      <div style="padding:0.75rem;background:var(--surface2);border-radius:var(--radius-sm)">
+        <div style="font-weight:700;font-size:0.85rem;color:var(--primary);margin-bottom:0.3rem"><i class="fa-solid fa-key"></i> Upsert / MERGE</div>
+        <p class="info-text">Insert new rows; update existing rows by primary key. Prevents duplicates on re-runs.</p>
+      </div>
+      <div style="padding:0.75rem;background:var(--surface2);border-radius:var(--radius-sm)">
+        <div style="font-weight:700;font-size:0.85rem;color:var(--accent);margin-bottom:0.3rem"><i class="fa-solid fa-trash"></i> Partition Overwrite</div>
+        <p class="info-text">Drop and reload a specific time partition. Re-runnable without duplicating data across partitions.</p>
+      </div>
+      <div style="padding:0.75rem;background:var(--surface2);border-radius:var(--radius-sm)">
+        <div style="font-weight:700;font-size:0.85rem;color:var(--secondary);margin-bottom:0.3rem"><i class="fa-solid fa-hashtag"></i> Checksum Deduplication</div>
+        <p class="info-text">Hash each row; skip rows with matching checksums already in the target table.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══ SECTION 3: Atomicity ═══ -->
+<div class="section-header mt-4">
+  <h2>3 — Atomicity &amp; Transaction Control</h2>
+  <p>All-or-nothing execution. Either every step in the pipeline succeeds and data is committed, or a failure triggers a full rollback — no partial writes.</p>
+</div>
+
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-atom"></i> Atomicity Visualiser — Simulate Success &amp; Failure</div>
+  <div style="display:flex;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap">
+    <button class="btn btn-primary" id="atomic-success-btn"><i class="fa-solid fa-circle-check"></i> Run — Success Path</button>
+    <button class="btn" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:var(--danger)" id="atomic-fail-btn">
+      <i class="fa-solid fa-bomb"></i> Inject Failure at Load
+    </button>
+  </div>
+
+  <!-- Pipeline stages -->
+  <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;padding:0.5rem 0">
+    <div class="pipeline-stage idle" id="stage-extract"><i class="fa-solid fa-download"></i>Extract<span style="font-size:0.65rem;color:var(--muted)">Pull Data</span></div>
+    <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+    <div class="pipeline-stage idle" id="stage-transform"><i class="fa-solid fa-wand-magic-sparkles"></i>Transform<span style="font-size:0.65rem;color:var(--muted)">Clean &amp; Enrich</span></div>
+    <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+    <div class="pipeline-stage idle" id="stage-validate"><i class="fa-solid fa-shield-halved"></i>Validate<span style="font-size:0.65rem;color:var(--muted)">Quality Gate</span></div>
+    <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+    <div class="pipeline-stage idle" id="stage-load"><i class="fa-solid fa-warehouse"></i>Load<span style="font-size:0.65rem;color:var(--muted)">Write Target</span></div>
+    <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+    <div class="pipeline-stage idle" id="stage-commit"><i class="fa-solid fa-circle-check"></i>Commit<span style="font-size:0.65rem;color:var(--muted)">Finalise TX</span></div>
+  </div>
+
+  <div id="atomic-msg" style="margin-top:1rem;min-height:2rem"></div>
+
+  <div class="info-text" style="margin-top:1rem;border-top:1px solid var(--border);padding-top:0.75rem">
+    <strong>ACID Properties:</strong>
+    <span class="badge badge-blue" style="margin:0 0.3rem">Atomicity — all or nothing</span>
+    <span class="badge badge-purple" style="margin:0 0.3rem">Consistency — valid state always</span>
+    <span class="badge badge-green" style="margin:0 0.3rem">Isolation — concurrent safety</span>
+    <span class="badge badge-amber" style="margin:0 0.3rem">Durability — committed = persisted</span>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══ SECTION 4: Error Handling & Backfill ═══ -->
+<div class="section-header mt-4">
+  <h2>4 — Error Handling, Retry &amp; Backfill</h2>
+  <p>Production pipelines must gracefully handle transient failures with exponential back-off retries and support backfill for missed historical partitions.</p>
+</div>
+
+<div class="grid-2 mb-4">
+  <div class="card">
+    <div class="card-title"><i class="fa-solid fa-rotate-right"></i> Retry &amp; Backfill Simulator</div>
+    <p class="info-text" style="margin-bottom:1rem">Simulates detection of a failed partition and automatic backfill recovery with retry logic.</p>
+    <button class="btn btn-primary" id="backfill-btn" style="margin-bottom:1rem">
+      <i class="fa-solid fa-play"></i> Simulate Backfill
+    </button>
+    <div id="backfill-log"
+         style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem;min-height:140px;max-height:240px;overflow-y:auto">
+      <span style="color:var(--muted);font-size:0.8rem;font-family:var(--mono)">Click "Simulate Backfill" to start recovery…</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><i class="fa-solid fa-code"></i> Retry Pattern (Python)</div>
+    <div class="code-block"><span class="code-lang">Python</span>
+<span class="kw">import</span> time, logging
+
+<span class="kw">def</span> <span class="fn">with_retry</span>(fn, max_retries=<span class="nb">3</span>, backoff=<span class="nb">5</span>):
+    <span class="st">"""Exponential back-off retry decorator."""</span>
+    <span class="kw">for</span> attempt <span class="kw">in</span> <span class="fn">range</span>(max_retries):
+        <span class="kw">try</span>:
+            <span class="kw">return</span> <span class="fn">fn</span>()
+        <span class="kw">except</span> Exception <span class="kw">as</span> e:
+            wait = backoff * (<span class="nb">2</span> ** attempt)
+            logging.<span class="fn">warning</span>(
+                <span class="st">f"Attempt {attempt+1} failed: {e}. "</span>
+                <span class="st">f"Retrying in {wait}s..."</span>
+            )
+            time.<span class="fn">sleep</span>(wait)
+    <span class="kw">raise</span> RuntimeError(<span class="st">"Max retries exceeded"</span>)</div>
+  </div>
+</div>
+
+<!-- Error handling strategies -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-bug"></i> Error Handling Strategies</div>
+  <div class="grid-3">
+    <div style="padding:1rem;background:var(--surface2);border-radius:var(--radius-sm)">
+      <div style="font-size:1.2rem;color:var(--warning);margin-bottom:0.5rem"><i class="fa-solid fa-clock-rotate-left"></i></div>
+      <strong style="font-size:0.85rem">Dead Letter Queue</strong>
+      <p class="info-text" style="margin-top:0.3rem">Failed records are routed to a DLQ for inspection and manual reprocessing without blocking the main pipeline.</p>
+    </div>
+    <div style="padding:1rem;background:var(--surface2);border-radius:var(--radius-sm)">
+      <div style="font-size:1.2rem;color:var(--primary);margin-bottom:0.5rem"><i class="fa-solid fa-rotate"></i></div>
+      <strong style="font-size:0.85rem">Exponential Back-off</strong>
+      <p class="info-text" style="margin-top:0.3rem">Retry delays double on each failure (5s 10s 20s) to avoid thundering-herd on transient network issues.</p>
+    </div>
+    <div style="padding:1rem;background:var(--surface2);border-radius:var(--radius-sm)">
+      <div style="font-size:1.2rem;color:var(--secondary);margin-bottom:0.5rem"><i class="fa-solid fa-calendar-days"></i></div>
+      <strong style="font-size:0.85rem">Partition Backfill</strong>
+      <p class="info-text" style="margin-top:0.3rem">Re-run pipeline for a specific date range (Airflow catchup=True) to recover missed data partitions.</p>
+    </div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ═══ SECTION 5: Pipeline Health Dashboard ═══ -->
+<div class="section-header mt-4">
+  <h2>5 — Pipeline Health Dashboard</h2>
+  <p>Real-time monitoring gauges for pipeline uptime, success rate, processing latency, and data freshness.</p>
+</div>
+
+<div class="kpi-grid mb-4">
+  <div class="kpi-card green">
+    <div class="kpi-icon green"><i class="fa-solid fa-heartbeat"></i></div>
+    <div class="kpi-info"><label>Uptime (30d)</label><div class="val green">99.97%</div></div>
+  </div>
+  <div class="kpi-card blue">
+    <div class="kpi-icon blue"><i class="fa-solid fa-circle-check"></i></div>
+    <div class="kpi-info"><label>Success Rate</label><div class="val blue">99.8%</div></div>
+  </div>
+  <div class="kpi-card purple">
+    <div class="kpi-icon purple"><i class="fa-solid fa-stopwatch"></i></div>
+    <div class="kpi-info"><label>Avg Latency</label><div class="val purple">5.4s</div></div>
+  </div>
+  <div class="kpi-card teal">
+    <div class="kpi-icon teal"><i class="fa-solid fa-droplet"></i></div>
+    <div class="kpi-info"><label>Data Freshness</label><div class="val teal">&lt; 1 min</div></div>
+  </div>
+</div>
+
+<!-- Health progress bars -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-gauge-high"></i> Pipeline Health Metrics</div>
+  <div style="display:flex;flex-direction:column;gap:1.1rem;margin-top:0.5rem">
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:0.4rem">
+        <span><i class="fa-solid fa-heartbeat" style="color:var(--secondary)"></i> Uptime</span><b style="color:var(--secondary)">99.97%</b>
+      </div>
+      <div class="progress-bar"><div class="progress-fill green" style="width:99.97%"></div></div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:0.4rem">
+        <span><i class="fa-solid fa-circle-check" style="color:var(--primary)"></i> Run Success Rate</span><b style="color:var(--primary)">99.8%</b>
+      </div>
+      <div class="progress-bar"><div class="progress-fill blue" style="width:99.8%"></div></div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:0.4rem">
+        <span><i class="fa-solid fa-shield-halved" style="color:var(--accent)"></i> Data Quality Score</span><b style="color:var(--accent)">96.4%</b>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:96.4%;background:var(--accent)"></div></div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:0.4rem">
+        <span><i class="fa-solid fa-bug" style="color:var(--danger)"></i> Error Rate</span><b style="color:var(--danger)">0.2%</b>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:0.2%;background:var(--danger)"></div></div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:0.4rem">
+        <span><i class="fa-solid fa-gauge-high" style="color:var(--warning)"></i> Resource Utilisation</span><b style="color:var(--warning)">67%</b>
+      </div>
+      <div class="progress-bar"><div class="progress-fill amber" style="width:67%"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Resilience concepts checklist -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-layer-group"></i> Resilience Design Principles</div>
+  <div style="display:flex;flex-direction:column;gap:0.5rem">
+    <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Idempotency</span><span>Re-running the same pipeline always produces the same output — no duplicate data</span></div>
+    <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Atomicity</span><span>All pipeline steps succeed together or all roll back — no partial writes to the warehouse</span></div>
+    <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Retry Logic</span><span>Transient failures (network, API timeout) are retried with exponential back-off up to 3x</span></div>
+    <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Dead Letter Queue</span><span>Unrecoverable records are isolated in a DLQ for manual inspection without blocking the pipeline</span></div>
+    <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Backfill / Catchup</span><span>Missed historical partitions can be reprocessed on-demand using Airflow's catchup mechanism</span></div>
+    <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Schema Evolution</span><span>Backward-compatible schema changes (add columns, nullable fields) handled without pipeline restarts</span></div>
+    <div class="check-row pass"><i class="check-icon fa-solid fa-circle-check"></i><span class="check-type">Observability</span><span>Structured logging, metrics (latency, throughput, error rate), and alerting integrated into every stage</span></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+window.W5_VALIDATION = {{ validation | tojson | safe }};
+</script>
+{% endblock %}

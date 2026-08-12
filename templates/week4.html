@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+{% block title %}Week 4 — Batch Pipeline{% endblock %}
+{% block page_title %}Week 4 — Batch Pipeline, Airflow &amp; Kafka{% endblock %}
+{% block page_subtitle %}Python Batch Pipeline · Apache Airflow DAG · Apache Kafka · API → Transform → Warehouse{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h2>Batch Pipeline &amp; Orchestration</h2>
+  <p>End-to-end batch pipeline: extract from REST API → transform with Pandas/PySpark → load to data warehouse. Orchestrated by Apache Airflow with Kafka for streaming ingestion.</p>
+</div>
+
+<!-- Pipeline Architecture -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-network-wired"></i> Pipeline Architecture</div>
+  <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;padding:1rem 0;overflow-x:auto">
+    <div class="pipeline-stage done" id="arch-api"><i class="fa-solid fa-globe"></i>REST API<span style="font-size:0.65rem;color:var(--muted)">Source</span></div>
+    <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+    <div class="pipeline-stage done" id="arch-extract"><i class="fa-solid fa-download"></i>Extract<span style="font-size:0.65rem;color:var(--muted)">HTTP Pull</span></div>
+    <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+    <div class="pipeline-stage done" id="arch-kafka"><i class="fa-brands fa-docker"></i>Kafka<span style="font-size:0.65rem;color:var(--muted)">Message Queue</span></div>
+    <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+    <div class="pipeline-stage done" id="arch-transform"><i class="fa-solid fa-wand-magic-sparkles"></i>Transform<span style="font-size:0.65rem;color:var(--muted)">Pandas/PySpark</span></div>
+    <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+    <div class="pipeline-stage done" id="arch-load"><i class="fa-solid fa-warehouse"></i>Load<span style="font-size:0.65rem;color:var(--muted)">Data Warehouse</span></div>
+  </div>
+</div>
+
+<!-- Pipeline Metrics Chart -->
+<div class="grid-2 mb-4">
+  <div class="card">
+    <div class="card-title"><i class="fa-solid fa-chart-area"></i> Pipeline Throughput (Simulated Run)</div>
+    <div id="pipeline-metrics-chart"></div>
+  </div>
+  <div class="card">
+    <div class="card-title"><i class="fa-solid fa-gauge-high"></i> Pipeline KPIs</div>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;margin-top:0.5rem">
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:0.3rem">
+          <span>Throughput</span><b style="color:var(--secondary)">~8,000 rec/min</b>
+        </div>
+        <div class="progress-bar"><div class="progress-fill green" style="width:80%"></div></div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:0.3rem">
+          <span>Success Rate</span><b style="color:var(--secondary)">99.98%</b>
+        </div>
+        <div class="progress-bar"><div class="progress-fill green" style="width:99%"></div></div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:0.3rem">
+          <span>Data Quality Score</span><b style="color:var(--primary)">96.2%</b>
+        </div>
+        <div class="progress-bar"><div class="progress-fill blue" style="width:96%"></div></div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:0.82rem;margin-bottom:0.3rem">
+          <span>Error Rate</span><b style="color:var(--danger)">0.02%</b>
+        </div>
+        <div class="progress-bar"><div class="progress-fill amber" style="width:2%"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Apache Airflow DAG -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-sitemap"></i> Apache Airflow — DAG: <code>books_etl</code></div>
+  <div class="dag-container">
+    <!-- Row 1 -->
+    <div class="dag-row">
+      <div class="dag-node success" data-delay="0"><i class="fa-solid fa-circle-check"></i>start</div>
+      <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+      <div class="dag-node success" data-delay="800"><i class="fa-solid fa-plug"></i>check_api_health</div>
+      <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+      <div class="dag-node success" data-delay="1600"><i class="fa-solid fa-download"></i>extract_api_data</div>
+      <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+      <div class="dag-node success" data-delay="2400"><i class="fa-solid fa-file-csv"></i>stage_raw_data</div>
+    </div>
+    <!-- Row 2 -->
+    <div class="dag-row" style="margin-top:0.5rem">
+      <div style="width:110px;flex-shrink:0"></div>
+      <div class="dag-arrow" style="visibility:hidden"><i class="fa-solid fa-arrow-right"></i></div>
+      <div class="dag-arrow" style="visibility:hidden"><i class="fa-solid fa-arrow-right"></i></div>
+      <div class="dag-arrow"><i class="fa-solid fa-arrow-down" style="margin-left:auto;margin-right:auto"></i></div>
+    </div>
+    <!-- Row 3 -->
+    <div class="dag-row">
+      <div class="dag-node success" data-delay="3200"><i class="fa-solid fa-broom"></i>transform_clean</div>
+      <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+      <div class="dag-node success" data-delay="4000"><i class="fa-solid fa-gears"></i>feature_engineer</div>
+      <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+      <div class="dag-node success" data-delay="4800"><i class="fa-solid fa-circle-check"></i>validate_schema</div>
+      <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+      <div class="dag-node success" data-delay="5600"><i class="fa-solid fa-warehouse"></i>load_warehouse</div>
+      <div class="dag-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+      <div class="dag-node success" data-delay="6400"><i class="fa-solid fa-flag-checkered"></i>end</div>
+    </div>
+  </div>
+  <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:1rem">
+    <span><span class="tag tag-success">●</span> success</span>
+    <span><span class="tag tag-running">●</span> running</span>
+    <span><span class="tag tag-pending">●</span> pending</span>
+    <span><span class="tag tag-failed">●</span> failed</span>
+  </div>
+</div>
+
+<!-- Airflow Code -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-brands fa-python"></i> Airflow DAG Definition</div>
+  <div class="code-block"><span class="code-lang">Python</span>
+<span class="kw">from</span> airflow <span class="kw">import</span> DAG
+<span class="kw">from</span> airflow.operators.python <span class="kw">import</span> PythonOperator
+<span class="kw">from</span> datetime <span class="kw">import</span> datetime, timedelta
+<span class="kw">import</span> pandas <span class="kw">as</span> pd
+
+<span class="nb">default_args</span> = {
+    <span class="st">'owner'</span>: <span class="st">'de_lab'</span>,
+    <span class="st">'retries'</span>: <span class="nb">3</span>,
+    <span class="st">'retry_delay'</span>: timedelta(minutes=<span class="nb">5</span>),
+}
+
+<span class="kw">with</span> DAG(
+    dag_id=<span class="st">'books_etl'</span>,
+    default_args=<span class="nb">default_args</span>,
+    schedule_interval=<span class="st">'@daily'</span>,
+    start_date=datetime(<span class="nb">2026</span>, <span class="nb">8</span>, <span class="nb">1</span>),
+    catchup=<span class="kw">False</span>,
+) <span class="kw">as</span> dag:
+
+    extract = PythonOperator(task_id=<span class="st">'extract_api_data'</span>, python_callable=extract_fn)
+    transform = PythonOperator(task_id=<span class="st">'transform_clean'</span>, python_callable=transform_fn)
+    load = PythonOperator(task_id=<span class="st">'load_warehouse'</span>, python_callable=load_fn)
+
+    extract >> transform >> load  <span class="cm"># DAG dependency chain</span></div>
+</div>
+
+<!-- Kafka Section -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-tower-broadcast"></i> Apache Kafka — Message Streaming</div>
+  <div class="kafka-flow">
+    <div class="kafka-node producer">
+      <i class="fa-solid fa-database"></i>
+      <h4>Producer</h4>
+      <p>Books API<br>REST Data Source</p>
+      <div style="margin-top:0.75rem;font-size:0.7rem;color:var(--muted)">Topic: <code>books.raw</code></div>
+    </div>
+
+    <div class="kafka-arrow">
+      <i class="fa-solid fa-arrow-right"></i>
+      <span class="msg">msg</span>
+      <span class="msg" style="animation-delay:0.7s">msg</span>
+    </div>
+
+    <div class="kafka-node broker">
+      <i class="fa-solid fa-server"></i>
+      <h4>Kafka Broker</h4>
+      <p>3 Partitions<br>Replication Factor 2</p>
+      <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.2rem">
+        <div style="font-size:0.68rem;padding:0.15rem 0.4rem;background:rgba(139,92,246,0.15);border-radius:3px">Partition 0</div>
+        <div style="font-size:0.68rem;padding:0.15rem 0.4rem;background:rgba(139,92,246,0.15);border-radius:3px">Partition 1</div>
+        <div style="font-size:0.68rem;padding:0.15rem 0.4rem;background:rgba(139,92,246,0.15);border-radius:3px">Partition 2</div>
+      </div>
+    </div>
+
+    <div class="kafka-arrow">
+      <i class="fa-solid fa-arrow-right"></i>
+      <span class="msg" style="animation-delay:0.35s">msg</span>
+      <span class="msg" style="animation-delay:1.05s">msg</span>
+    </div>
+
+    <div class="kafka-node consumer">
+      <i class="fa-solid fa-microchip"></i>
+      <h4>Consumer Group</h4>
+      <p>PySpark Stream<br>Processing</p>
+      <div style="margin-top:0.75rem;font-size:0.7rem;color:var(--muted)">Offset: <code>latest</code></div>
+    </div>
+
+    <div class="kafka-arrow">
+      <i class="fa-solid fa-arrow-right"></i>
+    </div>
+
+    <div class="kafka-node" style="background:rgba(6,182,212,0.1);border:1px solid rgba(6,182,212,0.3)">
+      <i class="fa-solid fa-warehouse" style="color:var(--info)"></i>
+      <h4 style="color:var(--info)">Data Warehouse</h4>
+      <p>PostgreSQL<br>/ BigQuery</p>
+    </div>
+  </div>
+
+  <div class="code-block" style="margin-top:1rem"><span class="code-lang">Python</span>
+<span class="kw">from</span> kafka <span class="kw">import</span> KafkaProducer, KafkaConsumer
+<span class="kw">import</span> json
+
+<span class="cm"># Producer — publishes book records to 'books.raw' topic</span>
+producer = KafkaProducer(
+    bootstrap_servers=[<span class="st">'localhost:9092'</span>],
+    value_serializer=<span class="kw">lambda</span> v: json.dumps(v).encode(<span class="st">'utf-8'</span>)
+)
+producer.send(<span class="st">'books.raw'</span>, {<span class="st">'isbn'</span>: <span class="st">'9781509858637'</span>, <span class="st">'price'</span>: <span class="nb">7.6</span>})
+
+<span class="cm"># Consumer — reads from 'books.raw' and transforms</span>
+consumer = KafkaConsumer(<span class="st">'books.raw'</span>, bootstrap_servers=[<span class="st">'localhost:9092'</span>])
+<span class="kw">for</span> msg <span class="kw">in</span> consumer:
+    record = json.loads(msg.value)
+    <span class="fn">process_and_load</span>(record)</div>
+</div>
+
+<!-- PySpark Code -->
+<div class="card mb-4">
+  <div class="card-title"><i class="fa-solid fa-fire"></i> PySpark Batch Pipeline</div>
+  <div class="code-block"><span class="code-lang">PySpark</span>
+<span class="kw">from</span> pyspark.sql <span class="kw">import</span> SparkSession
+<span class="kw">from</span> pyspark.sql.functions <span class="kw">import</span> col, avg, count, when, isnan
+
+spark = SparkSession.builder.appName(<span class="st">"BooksETL"</span>).getOrCreate()
+
+<span class="cm"># EXTRACT — read from source</span>
+df = spark.read.option(<span class="st">"header"</span>, <span class="kw">True</span>).csv(<span class="st">"s3://de-lab/books/raw/*.csv"</span>)
+
+<span class="cm"># TRANSFORM — clean and enrich</span>
+df_clean = (
+    df.dropDuplicates([<span class="st">"isbn"</span>])
+      .filter(col(<span class="st">"price"</span>).isNotNull())
+      .withColumn(<span class="st">"discount_pct"</span>, (col(<span class="st">"old_price"</span>) - col(<span class="st">"price"</span>)) / col(<span class="st">"old_price"</span>) * <span class="nb">100</span>)
+      .withColumn(<span class="st">"is_bestseller"</span>, when(col(<span class="st">"book_depository_stars"</span>) >= <span class="nb">4.5</span>, <span class="kw">True</span>).otherwise(<span class="kw">False</span>))
+)
+
+<span class="cm"># AGGREGATE — category-level cube</span>
+cube = df_clean.groupBy(<span class="st">"category"</span>, <span class="st">"format"</span>, <span class="st">"publisher_region"</span>).agg(
+    count(<span class="st">"isbn"</span>).alias(<span class="st">"total_books"</span>),
+    avg(<span class="st">"price"</span>).alias(<span class="st">"avg_price"</span>),
+    avg(<span class="st">"book_depository_stars"</span>).alias(<span class="st">"avg_rating"</span>)
+)
+
+<span class="cm"># LOAD — write to warehouse</span>
+cube.write.mode(<span class="st">"overwrite"</span>).parquet(<span class="st">"s3://de-lab/warehouse/books_cube/"</span>)</div>
+</div>
+
+<!-- Execution Log -->
+<div class="card mb-4">
+  <div class="card-title">
+    <i class="fa-solid fa-terminal"></i> Pipeline Execution Log
+    <button class="btn btn-primary" id="run-pipeline-btn" style="margin-left:auto;font-size:0.78rem">
+      <i class="fa-solid fa-play"></i> Run Pipeline
+    </button>
+  </div>
+  <div id="exec-log" style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);padding:1rem;min-height:160px;max-height:280px;overflow-y:auto;font-family:var(--mono);font-size:0.78rem;color:var(--text)">
+    {% if w4_data.run_logs %}
+    <div style="color:var(--secondary);font-weight:700;margin-bottom:0.5rem">
+      <i class="fa-solid fa-circle-check"></i> LATEST BATCH PIPELINE RUN (Logged in SQLite <code>pipeline_run_log</code>)
+    </div>
+    {% for log in w4_data.run_logs %}
+    <div style="margin-bottom:0.4rem;padding-bottom:0.4rem;border-bottom:1px solid rgba(255,255,255,0.05)">
+      <span class="badge badge-green">Run #{{ log.run_id }}</span>
+      <span style="color:var(--muted)">{{ log.run_timestamp }}</span> —
+      Extracted: <b>{{ log.records_extracted }}</b> |
+      Transformed: <b>{{ log.records_after_transform }}</b> |
+      Loaded: <b style="color:var(--secondary)">{{ log.records_loaded }}</b> |
+      Strategy: <b>{{ log.load_strategy }}</b> |
+      Time: <b>{{ log.total_ms }}ms</b>
+    </div>
+    {% endfor %}
+    {% else %}
+    <span style="color:var(--muted)">← Click "Run Pipeline" to trigger live REST API → Pandas → SQLite batch execution…</span>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Live Target Warehouse Table -->
+<div class="card mb-4">
+  <div class="card-title" style="justify-content:space-between">
+    <span><i class="fa-solid fa-database" style="color:var(--secondary)"></i> Live Target Warehouse Table — <code>api_books_fact</code></span>
+    <span class="badge badge-purple">{{ w4_data.fact_count }} Total Records Loaded</span>
+  </div>
+  <p style="font-size:0.8rem;color:var(--muted);margin-bottom:1rem">
+    Records extracted from Open Library REST API, feature-engineered with Pandas, and persisted to SQLite table <code>api_books_fact</code>.
+  </p>
+  {% if w4_data.sample_records %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>OL Key</th>
+          <th>Title</th>
+          <th>Author</th>
+          <th>Publisher</th>
+          <th>Year</th>
+          <th>Pages</th>
+          <th>Avg Rating</th>
+          <th>API Source</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in w4_data.sample_records %}
+        <tr>
+          <td class="font-mono" style="font-size:0.75rem">{{ r.ol_key }}</td>
+          <td><strong>{{ r.title }}</strong></td>
+          <td>{{ r.author }}</td>
+          <td style="color:var(--muted)">{{ r.publisher }}</td>
+          <td>{{ r.publish_year | int }}</td>
+          <td>{{ r.pages | int }}</td>
+          <td>
+            <span class="badge {% if r.is_highly_rated %}badge-green{% else %}badge-blue{% endif %}">
+              <i class="fa-solid fa-star"></i> {{ r.avg_rating }}
+            </span>
+          </td>
+          <td><span class="badge badge-purple">{{ r.api_source }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:2rem;color:var(--muted)">
+    <i class="fa-solid fa-inbox fa-2x" style="margin-bottom:0.5rem;display:block"></i>
+    No records loaded yet. Click "Run Pipeline" above to run the API batch pipeline!
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

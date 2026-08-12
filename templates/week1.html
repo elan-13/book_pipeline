@@ -1,0 +1,497 @@
+{% extends "base.html" %}
+{% block title %}Ex 1 — Data Ingestion & EDA{% endblock %}
+{% block page_title %}Exercise 1 — Data Ingestion &amp; Exploratory Analysis{% endblock %}
+{% block page_subtitle %}Data Collection · Preprocessing Pipeline · Feature Engineering · EDA Charts{% endblock %}
+
+{% block content %}
+<div class="section-header">
+  <h2>Exercise 1 &amp; 2 — Data Collection &amp; EDA</h2>
+  <p>Source dataset: <strong>main_dataset.csv</strong> ({{ analysis.total_rows | format_num }} raw rows · 11 original columns) enriched with local <strong>book-covers/</strong> images.</p>
+  <div style="display:flex;gap:0.75rem;align-items:center;margin-top:0.75rem;flex-wrap:wrap">
+    <button type="button" id="btn-rerun-eda-scratch" class="btn badge badge-purple" style="font-size:0.8rem;padding:0.55rem 1rem;cursor:pointer;border:none">
+      <i class="fa-solid fa-arrows-rotate"></i> Re-Run EDA Process From Scratch
+    </button>
+    <a href="/api/download-processed-csv" class="btn badge badge-blue" style="text-decoration:none;font-size:0.8rem;padding:0.55rem 1rem">
+      <i class="fa-solid fa-download"></i> Download Processed CSV ({{ analysis.total_rows | format_num }} rows · 19 cols)
+    </a>
+    <a href="/week2" class="btn badge badge-green" style="text-decoration:none;font-size:0.8rem;padding:0.55rem 1rem">
+      <i class="fa-solid fa-arrows-spin"></i> Pass Processed CSV to Week 2 ETL <i class="fa-solid fa-arrow-right"></i>
+    </a>
+    <span id="rerun-eda-status"></span>
+  </div>
+</div>
+
+<!-- Navigation Sub-Tabs -->
+<div class="sub-nav-tabs mb-4">
+  <button class="tab-btn active" data-tab="tab-pipeline"><i class="fa-solid fa-diagram-next"></i> 1. Pipeline &amp; Summary</button>
+  <button class="tab-btn" data-tab="tab-features"><i class="fa-solid fa-flask"></i> 2. Feature Engineering</button>
+  <button class="tab-btn" data-tab="tab-charts"><i class="fa-solid fa-chart-pie"></i> 3. Visual EDA Charts</button>
+  <button class="tab-btn" data-tab="tab-data"><i class="fa-solid fa-images"></i> 4. Data &amp; Cover Gallery</button>
+</div>
+
+<!-- ======================================================== -->
+<!-- TAB 1: PIPELINE & SUMMARY                                -->
+<!-- ======================================================== -->
+<div id="tab-pipeline" class="week1-section">
+  <!-- KPI Row -->
+  <div class="kpi-grid">
+    <div class="kpi-card blue">
+      <div class="kpi-icon blue"><i class="fa-solid fa-table-rows"></i></div>
+      <div class="kpi-info"><label>Total Rows</label><div class="val blue" id="kpi-rows">{{ analysis.total_rows | format_num }}</div></div>
+    </div>
+    <div class="kpi-card purple">
+      <div class="kpi-icon purple"><i class="fa-solid fa-columns"></i></div>
+      <div class="kpi-info"><label>Columns</label><div class="val purple" id="kpi-cols">{{ analysis.total_cols }}</div></div>
+    </div>
+    <div class="kpi-card amber">
+      <div class="kpi-icon amber"><i class="fa-solid fa-circle-exclamation"></i></div>
+      <div class="kpi-info"><label>Missing Data</label><div class="val amber" id="kpi-missing">{{ analysis.missing_pct }}%</div></div>
+    </div>
+    <div class="kpi-card red">
+      <div class="kpi-icon red"><i class="fa-solid fa-clone"></i></div>
+      <div class="kpi-info"><label>Duplicate ISBNs</label><div class="val red" id="kpi-dupes">{{ analysis.duplicates }}</div></div>
+    </div>
+  </div>
+
+  <!-- BEFORE EDA vs AFTER EDA COMPARISON MATRIX -->
+  <div class="card mb-4 mt-4" style="border-color:var(--primary)">
+    <div class="card-title" style="justify-content:space-between">
+      <span><i class="fa-solid fa-code-compare" style="color:var(--primary)"></i> Pipeline Impact: BEFORE EDA (Raw Source) vs. AFTER EDA (Processed Dataset)</span>
+      <span class="badge badge-green"><i class="fa-solid fa-check-double"></i> 100% Cleaned &amp; Validated</span>
+    </div>
+    <p class="info-text mb-4">Detailed side-by-side comparison showing the exact transformations, missing value imputations, deduplications, and feature engineering applied during EDA.</p>
+
+    <div class="grid-2 mb-4">
+      <!-- BEFORE EDA CARD -->
+      <div style="background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.25);border-radius:var(--radius-sm);padding:1.25rem">
+        <div style="font-weight:700;color:var(--danger);font-size:0.95rem;margin-bottom:0.75rem;display:flex;align-items:center;justify-content:space-between">
+          <span><i class="fa-solid fa-file-excel"></i> BEFORE EDA (Raw Source Dataset)</span>
+          <span class="badge badge-red">Uncleaned Raw Data</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.83rem">
+          <div><strong>Raw Records:</strong> <span id="before-rows">{{ eda_comparison.raw_summary.rows | format_num }} rows</span></div>
+          <div><strong>Raw Columns:</strong> 11 original fields</div>
+          <div><strong>Missing Cells:</strong> <span class="badge badge-red" id="before-nulls">{{ eda_comparison.raw_summary.nulls | format_num }} nulls</span></div>
+          <div><strong>Duplicate ISBNs:</strong> <span class="badge badge-amber" id="before-dupes">{{ eda_comparison.raw_summary.dupes | format_num }} duplicates</span></div>
+          <div><strong>Engineered Features:</strong> 0 features</div>
+        </div>
+      </div>
+
+      <!-- AFTER EDA CARD -->
+      <div style="background:rgba(16,185,129,0.06);border:1px solid rgba(16,185,129,0.25);border-radius:var(--radius-sm);padding:1.25rem">
+        <div style="font-weight:700;color:var(--secondary);font-size:0.95rem;margin-bottom:0.75rem;display:flex;align-items:center;justify-content:space-between">
+          <span><i class="fa-solid fa-wand-magic-sparkles"></i> AFTER EDA (Processed &amp; Enriched)</span>
+          <span class="badge badge-green">Production Ready</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:0.5rem;font-size:0.83rem">
+          <div><strong>Clean Records:</strong> <span id="after-rows">{{ eda_comparison.proc_summary.rows | format_num }} deduplicated rows</span></div>
+          <div><strong>Enriched Schema:</strong> 19 feature columns (+8 added)</div>
+          <div><strong>Missing Cells:</strong> <span class="badge badge-green">0 nulls (0.0% missing)</span></div>
+          <div><strong>Duplicate ISBNs:</strong> <span class="badge badge-green">0 duplicates (Enforced Primary Key)</span></div>
+          <div><strong>Engineered Features:</strong> <span class="badge badge-purple">8 new feature columns</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COMPARISON TABLE -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Attribute / Metric</th>
+            <th style="color:var(--danger)">BEFORE EDA (Raw Dataset)</th>
+            <th style="color:var(--secondary)">AFTER EDA (Processed Dataset)</th>
+            <th style="color:var(--primary)">Transformation &amp; Impact</th>
+          </tr>
+        </thead>
+        <tbody id="eda-comparison-tbody">
+          {% for row in eda_comparison.comparison %}
+          <tr>
+            <td><b>{{ row.attribute }}</b></td>
+            <td><span class="badge badge-red">{{ row.before }}</span></td>
+            <td><span class="badge badge-green">{{ row.after }}</span></td>
+            <td><span class="badge badge-blue">{{ row.change }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card green">
+      <div class="kpi-icon green"><i class="fa-solid fa-hashtag"></i></div>
+      <div class="kpi-info"><label>Numeric Cols</label><div class="val green">{{ analysis.numeric_cols | length }}</div></div>
+    </div>
+    <div class="kpi-card teal">
+      <div class="kpi-icon teal"><i class="fa-solid fa-font"></i></div>
+      <div class="kpi-info"><label>Categorical Cols</label><div class="val teal">{{ analysis.categorical_cols | length }}</div></div>
+    </div>
+  </div>
+
+  <!-- GRAPHICAL VISUAL PIPELINE DIAGRAM (No bullet text!) -->
+  <div class="card mb-4 mt-4">
+    <div class="card-title">
+      <i class="fa-solid fa-diagram-project"></i> Visual Pipeline Flow — End-to-End Execution Diagram
+      <span class="badge badge-green" style="margin-left:auto"><i class="fa-solid fa-bolt"></i> Live Stream</span>
+    </div>
+    <p class="info-text mb-4">Architectural process flow tracking dataset state from raw ingestion to analytical store.</p>
+    
+    <!-- Flowchart Nodes -->
+    <div class="pipeline-flow-wrap" id="w1-pipeline-flow">
+      <!-- Populated via main.js renderPipelineFlow() -->
+    </div>
+  </div>
+
+  <!-- PIPELINE STAGES CHART -->
+  <div class="card mb-4">
+    <div class="card-title"><i class="fa-solid fa-chart-line"></i> Pipeline Processing Metrics — Records &amp; Features per Stage</div>
+    <div id="w1-pipeline-chart"></div>
+  </div>
+
+  <!-- INTERACTIVE ADD NEW RECORD FORM -->
+  <div class="card mb-4">
+    <div class="card-title">
+      <i class="fa-solid fa-square-plus"></i> Add New Record to Dataset — Dynamic Feature Calculation
+      <span class="badge badge-purple" style="margin-left:auto"><i class="fa-solid fa-wand-magic-sparkles"></i> Auto Feature Engine</span>
+    </div>
+    <p class="info-text mb-4">Input raw book columns below. The feature pipeline will automatically calculate all 9 derived columns (Discount %, GBP Price, Value Score, Bestseller Flag, ISBN Validity, Price Tier, Discount Tier) and append it to the dataset live.</p>
+
+    <form id="add-record-form" onsubmit="return false;">
+      <div class="grid-2 mb-4" style="gap:1rem">
+        <div>
+          <label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:0.25rem">Book Title *</label>
+          <input type="text" id="rec-title" class="form-control" placeholder="e.g. Designing Data-Intensive Applications" required style="width:100%;padding:0.5rem 0.75rem;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:var(--radius-sm)">
+        </div>
+        <div>
+          <label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:0.25rem">Author</label>
+          <input type="text" id="rec-author" class="form-control" placeholder="e.g. Martin Kleppmann" value="Martin Kleppmann" style="width:100%;padding:0.5rem 0.75rem;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:var(--radius-sm)">
+        </div>
+      </div>
+
+      <div class="grid-4 mb-4" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1rem">
+        <div>
+          <label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:0.25rem">Category</label>
+          <select id="rec-category" style="width:100%;padding:0.5rem 0.75rem;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:var(--radius-sm)">
+            <option value="Computing" selected>Computing</option>
+            <option value="Medical">Medical</option>
+            <option value="Biography">Biography</option>
+            <option value="Business-Finance-Law">Business-Finance-Law</option>
+            <option value="Health">Health</option>
+            <option value="History-Archaeology">History-Archaeology</option>
+            <option value="Science-Fiction-Fantasy-Horror">Science-Fiction</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:0.25rem">Format</label>
+          <select id="rec-format" style="width:100%;padding:0.5rem 0.75rem;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:var(--radius-sm)">
+            <option value="Paperback" selected>Paperback</option>
+            <option value="Hardback">Hardback</option>
+            <option value="Ebook">Ebook</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:0.25rem">Price ($)</label>
+          <input type="number" step="0.01" id="rec-price" value="19.99" style="width:100%;padding:0.5rem 0.75rem;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:var(--radius-sm)">
+        </div>
+        <div>
+          <label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:0.25rem">Old Price ($)</label>
+          <input type="number" step="0.01" id="rec-old-price" value="29.99" style="width:100%;padding:0.5rem 0.75rem;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:var(--radius-sm)">
+        </div>
+        <div>
+          <label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:0.25rem">Rating (1-5)</label>
+          <input type="number" step="0.1" id="rec-rating" value="4.8" min="1" max="5" style="width:100%;padding:0.5rem 0.75rem;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:var(--radius-sm)">
+        </div>
+        <div>
+          <label style="font-size:0.75rem;color:var(--muted);display:block;margin-bottom:0.25rem">ISBN-13</label>
+          <input type="text" id="rec-isbn" value="9781449373320" style="width:100%;padding:0.5rem 0.75rem;background:var(--surface2);border:1px solid var(--border2);color:var(--text);border-radius:var(--radius-sm)">
+        </div>
+      </div>
+
+      <!-- Live Feature Preview Badges -->
+      <div style="background:var(--surface2);padding:0.75rem 1rem;border-radius:var(--radius-sm);margin-bottom:1rem;display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap">
+        <span style="font-size:0.72rem;color:var(--muted);font-weight:700;text-transform:uppercase">Live Auto Features:</span>
+        <span id="prev-disc-badge" class="badge badge-amber">$10.00 (33.3% off)</span>
+        <span id="prev-gbp-badge" class="badge badge-purple">£15.79 GBP</span>
+        <span id="prev-val-badge" class="badge badge-teal">Value: 0.2401</span>
+        <span id="prev-best-badge" class="badge badge-green">★ Bestseller</span>
+        <span id="prev-ptier-badge" class="badge badge-blue">Standard ($10-25)</span>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:1rem">
+        <button type="button" id="btn-add-record" class="btn badge badge-purple" style="font-size:0.85rem;padding:0.6rem 1.2rem;cursor:pointer;border:none">
+          <i class="fa-solid fa-plus"></i> Calculate Features &amp; Append Record
+        </button>
+        <span id="add-record-status"></span>
+      </div>
+    </form>
+  </div>
+
+  <!-- Upload Zone -->
+  <div class="upload-zone mb-4" id="upload-zone">
+    <input type="file" id="csv-input" accept=".csv">
+    <i class="fa-solid fa-cloud-arrow-up"></i>
+    <h3>Drag &amp; Drop custom CSV to re-run pipeline</h3>
+    <p>Upload any CSV to execute live preprocessing, feature engineering &amp; EDA.</p>
+    <div id="upload-status"><span class="badge badge-green"><i class="fa-solid fa-circle-check"></i> Preloaded: main_dataset.csv ({{ analysis.total_rows | format_num }} rows)</span></div>
+  </div>
+</div>
+
+<!-- ======================================================== -->
+<!-- TAB 2: FEATURE ENGINEERING & DATA QUALITY                -->
+<!-- ======================================================== -->
+<div id="tab-features" class="week1-section" style="display:none">
+  <!-- Feature Engineering Summary -->
+  <div class="card mb-4">
+    <div class="card-title"><i class="fa-solid fa-flask"></i> Feature Engineering Summary</div>
+    <div class="grid-3">
+      <div style="text-align:center;padding:1rem">
+        <div style="font-size:2rem;color:var(--secondary)"><i class="fa-solid fa-filter"></i></div>
+        <div style="font-size:1.4rem;font-weight:800;color:var(--secondary);margin:.4rem 0">{{ analysis.total_rows | format_num }}</div>
+        <div style="font-size:0.78rem;color:var(--muted)">Clean Records (after Dedup)</div>
+      </div>
+      <div style="text-align:center;padding:1rem">
+        <div style="font-size:2rem;color:var(--warning)"><i class="fa-solid fa-triangle-exclamation"></i></div>
+        <div style="font-size:1.4rem;font-weight:800;color:var(--warning);margin:.4rem 0">{{ analysis.total_missing }}</div>
+        <div style="font-size:0.78rem;color:var(--muted)">Imputed Missing Values</div>
+      </div>
+      <div style="text-align:center;padding:1rem">
+        <div style="font-size:2rem;color:var(--accent)"><i class="fa-solid fa-wand-magic-sparkles"></i></div>
+        <div style="font-size:1.4rem;font-weight:800;color:var(--accent);margin:.4rem 0">7</div>
+        <div style="font-size:0.78rem;color:var(--muted)">Derived Engineered Features</div>
+      </div>
+    </div>
+    <hr class="divider">
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.5rem">
+      <span class="badge badge-blue"><i class="fa-solid fa-calculator"></i> discount_amount</span>
+      <span class="badge badge-blue"><i class="fa-solid fa-percent"></i> discount_pct</span>
+      <span class="badge badge-purple"><i class="fa-solid fa-sterling-sign"></i> price_gbp</span>
+      <span class="badge badge-purple"><i class="fa-solid fa-star-half-stroke"></i> value_score</span>
+      <span class="badge badge-green"><i class="fa-solid fa-award"></i> is_bestseller</span>
+      <span class="badge badge-amber"><i class="fa-solid fa-barcode"></i> isbn13_valid</span>
+      <span class="badge badge-green"><i class="fa-solid fa-font"></i> title_length</span>
+      <span class="badge badge-teal"><i class="fa-solid fa-image"></i> cover_url</span>
+    </div>
+  </div>
+
+  <!-- Detected Columns & Types -->
+  <div class="card mb-4">
+    <div class="card-title"><i class="fa-solid fa-list"></i> Schema &amp; Detected Data Types</div>
+    <div class="chip-list" id="col-types-list">
+      {% for col, dtype in analysis.col_types.items() %}
+      <span class="chip">{{ col }} <em style="color:var(--muted)">{{ dtype }}</em></span>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Outlier Detection -->
+  <div class="card mb-4">
+    <div class="card-title"><i class="fa-solid fa-binoculars"></i> Outlier Detection (IQR Method)</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Column</th><th>Outlier Count</th><th>Outlier %</th><th>Severity</th></tr></thead>
+        <tbody id="outlier-tbody">
+          {% for col, o in analysis.outlier_info.items() %}
+          <tr>
+            <td class="font-mono">{{ col }}</td>
+            <td>{{ o.count }}</td>
+            <td>{{ o.pct }}%</td>
+            <td>
+              <span class="tag tag-{% if o.pct < 5 %}PASS{% elif o.pct < 15 %}WARN{% else %}FAIL{% endif %}">
+                {% if o.pct < 5 %}Normal{% elif o.pct < 15 %}Moderate{% else %}High{% endif %}
+              </span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ======================================================== -->
+<!-- TAB 3: VISUAL EDA CHARTS                                 -->
+<!-- ======================================================== -->
+<div id="tab-charts" class="week1-section" style="display:none">
+
+  <!-- SECTION 1: DIMENSIONALITY REDUCTION (PCA) -->
+  <div class="section-header">
+    <h2>1. Dimensionality Reduction (PCA Analysis)</h2>
+    <p>Projecting 5 numerical features onto 2 orthogonal Principal Components to discover cluster patterns in 2D space.</p>
+  </div>
+
+  <div class="card mb-4">
+    <div class="card-title" style="justify-content:space-between">
+      <span><i class="fa-solid fa-circle-nodes" style="color:var(--accent)"></i> <strong>PCA 2D Feature Projection (PC1 vs. PC2)</strong></span>
+      <span class="badge badge-purple" id="pca-var-total">Total Variance Explained: --%</span>
+    </div>
+    <p style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem">
+      5 numeric features (<code>price</code>, <code>rating</code>, <code>old_price</code>, <code>discount_pct</code>, <code>value_score</code>) are projected onto PC1 &amp; PC2 axes using <code>scikit-learn</code> PCA. Each dot represents a book sample color-coded by category.
+    </p>
+    <div id="pca-chart" style="min-height:280px"></div>
+  </div>
+
+  <!-- SECTION 2: TOP 2 NUMERIC FEATURE DISTRIBUTIONS -->
+  <div class="section-header mt-4">
+    <h2>2. Primary Numeric Feature Distributions</h2>
+    <p>7-point statistical distributions (Min, Q25, Median, Mean, Q75, Q90, Max) for the 2 primary numerical features (Price &amp; Rating).</p>
+  </div>
+
+  <div class="grid-2 mb-4" id="numeric-charts">
+    <!-- Price ($ USD) & Customer Rating (1-5 Stars) rendered via main.js -->
+  </div>
+
+  <!-- SECTION 3: CATEGORY & MARKET TIER DISTRIBUTIONS -->
+  <div class="section-header mt-4">
+    <h2>3. Category &amp; Market Tier Distributions</h2>
+    <p>Subject category volumes alongside binned price and discount market tier distributions.</p>
+  </div>
+
+  <!-- Top 10 Categories by Count -->
+  <div class="card mb-4">
+    <div class="card-title"><i class="fa-solid fa-layer-group" style="color:var(--secondary)"></i> <strong>Top 10 Categories by Book Count</strong></div>
+    <p style="font-size:0.78rem;color:var(--muted);margin-bottom:1rem">Volume breakdown of books across the top subject categories in the catalog.</p>
+    <div id="category-count-chart" style="min-height:260px"></div>
+  </div>
+
+  <!-- Price & Discount Tiers Grid -->
+  <div class="grid-2 mb-4">
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-chart-pie" style="color:var(--primary)"></i> <strong>Price Tier Breakdown</strong></div>
+      <p style="font-size:0.78rem;color:var(--muted);margin-bottom:0.75rem">Categorized price brackets: Budget (&lt;$10), Standard ($10-25), Premium ($25-50), Luxury (&gt;$50).</p>
+      <div id="price-tiers-chart"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><i class="fa-solid fa-tags" style="color:var(--warning)"></i> <strong>Discount Tier Distribution</strong></div>
+      <p style="font-size:0.78rem;color:var(--muted);margin-bottom:0.75rem">Discount intensity categories: No Discount, Low (&lt;15%), Medium (15-35%), High (&gt;35%).</p>
+      <div id="discount-tiers-chart"></div>
+    </div>
+  </div>
+
+  <!-- Comprehensive Statistical Summary Matrix Table -->
+  <div class="card mb-4 mt-4">
+    <div class="card-title"><i class="fa-solid fa-calculator"></i> Full Statistical Metrics Matrix (Descriptive EDA)</div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Column</th><th>Mean</th><th>Median</th><th>Std Dev</th><th>Skewness</th><th>Kurtosis</th><th>Min</th><th>Max</th><th>Q25</th><th>Q75</th><th>Q90</th><th>IQR</th>
+          </tr>
+        </thead>
+        <tbody id="stats-matrix-tbody">
+          <!-- Rendered via main.js -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Categorical Distributions -->
+  <div class="section-header mt-4">
+    <h2>Categorical Feature Distributions</h2>
+    <p>Top value counts with simplified truncated labels (hover for full name).</p>
+  </div>
+  <div class="grid-2 mb-4" id="cat-charts">
+    <!-- Rendered via main.js -->
+  </div>
+
+  <!-- Correlation Heatmap -->
+  <div class="card mt-4 mb-4">
+    <div class="card-title"><i class="fa-solid fa-fire"></i> Correlation Matrix — Engineered Features</div>
+    <div id="corr-chart"></div>
+  </div>
+</div>
+
+<!-- ======================================================== -->
+<!-- TAB 4: DATA SAMPLE & COVER GALLERY                       -->
+<!-- ======================================================== -->
+<div id="tab-data" class="week1-section" style="display:none">
+  <!-- Book Cover Grid -->
+  {% if cover_grid %}
+  <div class="section-header">
+    <h2>Book Cover Gallery</h2>
+    <p>Sample book covers mapped from local <strong>book-covers/</strong> directory via Flask <code>/covers/</code> route.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:1rem;margin-bottom:2rem">
+    {% for book in cover_grid %}
+    <div class="card" style="padding:0.75rem;text-align:center;position:relative">
+      {% if book.is_bestseller %}
+      <span class="badge badge-amber" style="position:absolute;top:6px;right:6px;font-size:0.6rem;padding:2px 5px"><i class="fa-solid fa-star"></i></span>
+      {% endif %}
+      <img src="{{ book.cover_url }}" alt="{{ book.title }}"
+           style="width:100%;height:140px;object-fit:cover;border-radius:6px;margin-bottom:0.5rem;background:var(--surface2)"
+           onerror="this.style.display='none'">
+      <div style="font-size:0.7rem;font-weight:600;line-height:1.2;margin-bottom:0.25rem">{{ book.title[:30] }}{% if book.title|length > 30 %}…{% endif %}</div>
+      <div style="font-size:0.65rem;color:var(--muted)">{{ book.author[:20] }}</div>
+      <div style="font-size:0.65rem;margin-top:0.3rem">
+        <span class="badge badge-green" style="font-size:0.6rem">{{ book.rating }}★</span>
+        <span class="badge badge-purple" style="font-size:0.6rem">${{ "%.2f" | format(book.price) }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Sample Data -->
+  <div class="card mb-4">
+    <div class="card-title"><i class="fa-solid fa-table"></i> Sample Preprocessed Data (First 10 Rows)</div>
+    <div class="table-wrap" id="sample-table-wrap">
+      {% if analysis.sample %}
+      {% set cols = analysis.sample[0].keys() | list %}
+      <table>
+        <thead><tr>{% for c in cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for row in analysis.sample %}
+          <tr>{% for c in cols %}
+            <td class="font-mono">
+              {% if c == 'cover_url' and row[c] and row[c] != 'N/A' %}
+                <img src="{{ row[c] }}" style="height:32px;border-radius:3px">
+              {% elif c == 'is_bestseller' %}
+                {% if row[c] %}<span class="badge badge-amber">★ Yes</span>{% else %}<span class="badge">No</span>{% endif %}
+              {% else %}
+                {{ row[c] | default('N/A') }}
+              {% endif %}
+            </td>
+          {% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Category Statistics -->
+  <div class="card mb-4">
+    <div class="card-title"><i class="fa-solid fa-chart-column"></i> Derived Category Metrics (33 Categories)</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Category</th><th>Total Books</th><th>Avg Price</th><th>Avg Rating</th><th>Avg Discount %</th><th>Bestsellers</th></tr></thead>
+        <tbody>
+          {% for row in cat_stats %}
+          <tr>
+            <td><b>{{ row.category }}</b></td>
+            <td>{{ row.total_books }}</td>
+            <td><span class="badge badge-purple">${{ "%.2f" | format(row.avg_price_usd) }}</span></td>
+            <td><span class="badge badge-green">{{ "%.2f" | format(row.avg_rating) }} ★</span></td>
+            <td><span class="badge badge-amber">{{ row.avg_discount }}%</span></td>
+            <td><span class="badge badge-blue">{{ row.bestsellers }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<style>
+  .table-wrap, [id^="num-chart-"], [id^="cat-chart-"], #corr-chart, #w1-pipeline-chart {
+    padding: 1.25rem;
+    background: var(--surface2);
+    border-radius: var(--radius-sm);
+  }
+</style>
+<script>
+window.W1_ANALYSIS = {{ analysis | tojson | safe }};
+</script>
+{% endblock %}

@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}DE Lab{% endblock %} — End-to-End Book Pipeline</title>
+  <meta name="description" content="End-to-End Book Pipeline — Data Engineering Laboratory Dashboard">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v=3">
+</head>
+<body data-page="{{ active }}">
+
+  <!-- ─── Sidebar ─────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-badge"><i class="fa-solid fa-book-bookmark"></i> Book Pipeline</div>
+      <h2>End to End<br>Book Pipeline</h2>
+      <p>Data Engineering ETL &amp; DW Platform</p>
+    </div>
+
+    <nav class="sidebar-nav">
+      <span class="nav-label">Exercises</span>
+
+      <a href="/week1" class="nav-item {% if active=='week1' %}active{% endif %}">
+        <span class="nav-icon"><i class="fa-solid fa-magnifying-glass-chart"></i></span>
+        Ex 1 — Data Ingestion &amp; EDA
+        {% if active=='week1' %}<span class="nav-badge">Active</span>{% endif %}
+      </a>
+
+      <a href="/week2" class="nav-item {% if active=='week2' %}active{% endif %}">
+        <span class="nav-icon"><i class="fa-solid fa-arrows-spin"></i></span>
+        Ex 2 — ETL Pipeline
+        {% if active=='week2' %}<span class="nav-badge">Active</span>{% endif %}
+      </a>
+
+      <a href="/week3" class="nav-item {% if active=='week3' %}active{% endif %}">
+        <span class="nav-icon"><i class="fa-solid fa-diagram-project"></i></span>
+        Ex 3 — Data Warehouse Design
+        {% if active=='week3' %}<span class="nav-badge">Active</span>{% endif %}
+      </a>
+
+      <a href="/week5" class="nav-item {% if active=='week5' %}active{% endif %}">
+        <span class="nav-icon"><i class="fa-solid fa-shield-halved"></i></span>
+        Ex 4 — Resilient Pipelines
+        {% if active=='week5' %}<span class="nav-badge">Active</span>{% endif %}
+      </a>
+    </nav>
+  </aside>
+
+  <!-- ─── Main ──────────────────────────────────── -->
+  <div class="main">
+    <div class="topbar">
+      <div class="topbar-title">
+        <h1>{% block page_title %}End to End Book Pipeline{% endblock %}</h1>
+        <p>{% block page_subtitle %}{% endblock %}</p>
+      </div>
+    </div>
+
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+
+  <!-- CDN Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+  {% block extra_scripts %}{% endblock %}
+</body>
+</html>
