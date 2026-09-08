@@ -1,0 +1,49 @@
+name: CD Pipeline - Staging Deployment & Quality Audit
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      target_env:
+        description: 'Target Deployment Environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+jobs:
+  deploy-staging:
+    name: Deploy to Staging & Run Audit Gates
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run Schema Migrations / Init
+        run: |
+          python -c "from pipeline.batch_pipeline import DB_PATH, init_target_table; import sqlite3; init_target_table(sqlite3.connect(str(DB_PATH)))"
+
+      - name: Execute Pipeline Validation Gate
+        env:
+          APP_ENV: staging
+        run: |
+          python -m pytest tests/test_data_quality.py -v
+
+      - name: Quality Gate Status
+        run: |
+          echo " Staging Pipeline Deployment & Validation Gates Completed Successfully."

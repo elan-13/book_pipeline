@@ -1,0 +1,38 @@
+# Pipeline Configuration as Code
+# Supports Environment Overrides (DEV, STAGING, PROD)
+
+app_env: "development"
+
+pipeline:
+  name: "OpenLibraryBatchETL"
+  version: "1.2.0"
+  request_timeout_seconds: 30
+  max_retries: 3
+  retry_delay_seconds: 2
+
+endpoints:
+  - name: "Open Library - Science"
+    url: "https://openlibrary.org/search.json"
+    subject: "science"
+    limit: 100
+  - name: "Open Library - Technology"
+    url: "https://openlibrary.org/search.json"
+    subject: "technology"
+    limit: 100
+  - name: "Open Library - Medicine"
+    url: "https://openlibrary.org/search.json"
+    subject: "medicine"
+    limit: 50
+
+database:
+  db_path: "outputs/week4/week4_api_batch.db"
+  target_table: "api_books_fact"
+  log_table: "pipeline_run_log"
+
+validation_rules:
+  min_rows_expected: 1
+  max_allowed_null_pct: 0.05
+  valid_rating_min: 0.0
+  valid_rating_max: 5.0
+  min_publish_year: 1000
+  max_publish_year: 2030

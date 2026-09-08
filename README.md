@@ -1,12 +1,12 @@
 # End-to-End Book Pipeline — Data Engineering Platform
 
-An interactive, web-based Data Engineering Laboratory Platform built with **Flask**, **Pandas**, **NumPy**, **Scikit-Learn**, and **SQLite**.
+An interactive, production-ready Data Engineering Laboratory Platform built with **Python**, **Pandas**, **Flask**, **SQLite**, **Pytest**, and **GitHub Actions**.
 
 ---
 
 ## 🌟 Key Features & Architecture
 
-This application implements 4 core data engineering pipeline exercises:
+This application implements 5 core data engineering pipeline exercises:
 
 ### 1. Exercise 1 — Data Ingestion & Exploratory Data Analysis (EDA)
 - **Visual Preprocessing Pipeline**: Raw CSV ingestion → Deduplication → Null Imputation → Feature Engineering → SQLite Fact Table load.
@@ -27,18 +27,28 @@ This application implements 4 core data engineering pipeline exercises:
 - **Star Schema Data Warehouse**: Dimension tables (`dim_category`, `dim_publisher`, `dim_format`, `dim_time`) surrounding `fact_book_sales` in `outputs/week3/week3_olap.db`.
 - **Live OLAP Operations**: Interactively execute **Slicing**, **Dicing**, **Rollup**, and **Drilldown** SQL queries against the physical SQLite Data Warehouse.
 
-### 4. Exercise 4 — Resilient Data Pipelines
+### 4. Exercise 4 — Resilient Data Pipelines & API Batch ETL
+- **Batch API Ingestion**: Extracts live book records from the Open Library REST API with exponential back-off retries.
 - **Automated Data Quality Validation Gates**: Null checks, schema verification, outlier boundaries (IQR $\times 1.5$), and primary key integrity checks.
-- **Idempotency**: Deterministic SHA-256 checksum verification across repeated pipeline runs.
-- **Atomicity Visualizer**: Demonstrates ACID transaction control (all-or-nothing commits vs rollback on error).
-- **Error Handling & Backfill Simulator**: Exponential back-off retry logic and historical partition recovery.
+- **Idempotency & ACID Transactions**: Deterministic SHA-256 checksum verification and atomic commits/rollbacks.
+
+### 5. Exercise 5 — CI/CD & Version Control for Data
+- **Git Branching Strategies**: Trunk-based vs GitFlow tailored for data engineering teams, schema evolution, and data contract testing.
+- **Pipeline as Code**: Programmatic, declarative YAML configurations (`config/pipeline_config.yaml`) with environment overrides (`DEV`, `STAGING`, `PROD`).
+- **Comprehensive Testing Suite**:
+  - **Unit Tests**: Granular tests for cleaning, flattening, imputation, deduplication, and feature engineering (`tests/test_transformations.py`).
+  - **Mock Tests**: Isolates external REST API endpoints (`requests.get`) and database loads (`tests/test_mock_pipeline.py`).
+  - **Data Quality Gates**: Automated assertion tests enforcing zero critical nulls and valid rating/year boundaries (`tests/test_data_quality.py`).
+- **GitHub Actions Workflows**: Multi-Python matrix CI (`3.10`, `3.11`, `3.12`), linting (`flake8`), automated test execution, and staging CD workflows (`.github/workflows/ci.yml`, `pipeline_cd.yml`).
+- **Local CI Runner**: Fast pre-commit runner script (`python run_ci.py`).
 
 ---
 
 ## 🛠️ Tech Stack
 
 - **Backend Framework**: Python 3, Flask, SQLite3
-- **Data Engineering & Analytics**: Pandas, NumPy, Scikit-Learn (PCA), PapaParse
+- **Data Engineering & Analytics**: Pandas, NumPy, Scikit-Learn (PCA), PyYAML, Requests
+- **Testing & CI/CD**: Pytest, Pytest-Mock, Flake8, GitHub Actions
 - **Frontend & Visualization**: Modern HTML5, CSS3 Glassmorphism UI, Vanilla JS, ApexCharts, FontAwesome 6
 
 ---
@@ -60,15 +70,20 @@ This application implements 4 core data engineering pipeline exercises:
 
 3. **Install dependencies**:
    ```bash
-   pip install flask pandas numpy scikit-learn
+   pip install -r requirements.txt
    ```
 
-4. **Run the Flask application**:
+4. **Run the Automated CI/CD Test Suite Locally**:
+   ```bash
+   python run_ci.py
+   # Or run pytest directly
+   python -m pytest tests/ -v
+   ```
+
+5. **Run the Flask Web Dashboard**:
    ```bash
    python app.py
    ```
-
-5. **Open in your browser**:
    Navigate to `http://127.0.0.1:5000`
 
 ---
@@ -77,13 +92,30 @@ This application implements 4 core data engineering pipeline exercises:
 
 ```
 book_pipeline/
-├── app.py                   # Main Flask Application & API Routes
-├── templates/               # HTML Jinja2 Templates (base, week1, week2, week3, week5)
-├── static/                  # Client Assets
-│   ├── css/style.css        # Premium Dark-Mode CSS Design Tokens
-│   └── js/main.js           # Client-Side Interactivity & ApexCharts Rendering
-├── pipeline/                # Core ETL Pipeline Modules
-├── requirements.txt         # Dependency List
-├── .gitignore               # Excludes large CSVs, DBs, and outputs/
-└── README.md                # Project Documentation
+├── .github/
+│   └── workflows/
+│       ├── ci.yml                 # GitHub Actions CI Workflow (Lint + Test Matrix)
+│       └── pipeline_cd.yml        # GitHub Actions CD Workflow (Staging Deployment)
+├── config/
+│   ├── pipeline_config.py         # Programmatic Configuration Loader
+│   └── pipeline_config.yaml       # Declarative Pipeline & Endpoint Specification
+├── pipeline/
+│   └── batch_pipeline.py          # Core Batch ETL Pipeline & Transformation Logic
+├── tests/
+│   ├── conftest.py                # Pytest Fixtures & Mock Payloads
+│   ├── test_transformations.py    # Unit Tests for Transformation Logic
+│   ├── test_mock_pipeline.py      # Mock Tests for API & DB Boundaries
+│   └── test_data_quality.py       # Data Quality Validation Gate Tests
+├── templates/                     # HTML Jinja2 Templates (base, week1, week2, week3, week5)
+├── static/                        # CSS / JS Static Assets
+├── run_ci.py                      # Local CI Test Runner
+├── pytest.ini                     # Pytest Configurations
+├── requirements.txt               # Dependencies
+├── .gitignore                     # Excludes CSVs, DBs, and outputs
+├── Week1_Explanation.md           # Ex 1 Ingestion & EDA Documentation
+├── Week2_Explanation.md           # Ex 2 ETL Pipeline Documentation
+├── Week3_Explanation.md           # Ex 3 Data Warehouse & OLAP Documentation
+├── Week4_Explanation.md           # Ex 4 API Batch Pipeline Documentation
+├── Week5_Explanation.md           # Ex 5 CI/CD & Version Control Documentation
+└── README.md                      # Project Documentation
 ```

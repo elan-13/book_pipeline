@@ -213,7 +213,17 @@ def transform(df_raw: pd.DataFrame) -> pd.DataFrame:
     log.info("=" * 60)
     log.info(f"[TRANSFORM] Raw input shape: {df_raw.shape}")
 
+    if df_raw.empty:
+        log.warning("[TRANSFORM] Input DataFrame is empty. Returning empty schema.")
+        return pd.DataFrame(columns=[
+            "ol_key", "isbn", "title", "author", "publisher", "subject",
+            "publish_year", "publish_decade", "pages", "page_tier",
+            "avg_rating", "rating_count", "is_highly_rated", "rating_category",
+            "has_isbn", "popularity_score", "title_word_count", "api_source"
+        ])
+
     df = df_raw.copy()
+
 
     # ── 1. Standardise column names ─────────────
     log.info("[TRANSFORM] Step 1: Standardising column names")
@@ -324,6 +334,14 @@ def transform(df_raw: pd.DataFrame) -> pd.DataFrame:
     # High-rating flag
     df["is_highly_rated"] = df["avg_rating"] >= 4.0
 
+    # Rating categorization
+    def rating_cat(r):
+        if r >= 4.5: return "Excellent (4.5+)"
+        elif r >= 4.0: return "Good (4.0-4.5)"
+        elif r >= 3.0: return "Average (3.0-4.0)"
+        else: return "Below Average (<3.0)"
+    df["rating_category"] = df["avg_rating"].apply(rating_cat)
+
     # ISBN completeness
     df["has_isbn"] = df["isbn"].str.match(r"^\d{10,13}$").fillna(False)
 
@@ -357,8 +375,8 @@ def transform(df_raw: pd.DataFrame) -> pd.DataFrame:
     final_cols = [
         "ol_key", "isbn", "title", "author", "publisher", "subject",
         "publish_year", "publish_decade", "pages", "page_tier",
-        "avg_rating", "rating_count", "is_highly_rated", "has_isbn",
-        "popularity_score", "title_word_count", "api_source"
+        "avg_rating", "rating_count", "is_highly_rated", "rating_category",
+        "has_isbn", "popularity_score", "title_word_count", "api_source"
     ]
     df = df[[c for c in final_cols if c in df.columns]]
     df["is_highly_rated"] = df["is_highly_rated"].astype(int)
@@ -373,10 +391,10 @@ def transform(df_raw: pd.DataFrame) -> pd.DataFrame:
 # PHASE iii — DATA LOADING INTO SQLITE
 # ══════════════════════════════════════════════════
 
-def init_target_table(conn: sqlite3.Connection):
+def init_target_table(conn: sqlite3.Connection, target_table: str = TARGET_TABLE, log_table: str = LOG_TABLE):
     """Create target fact table and pipeline run log table."""
     conn.execute(f"""
-    CREATE TABLE IF NOT EXISTS {TARGET_TABLE} (
+    CREATE TABLE IF NOT EXISTS {target_table} (
         id               INTEGER PRIMARY KEY AUTOINCREMENT,
         ol_key           TEXT UNIQUE,
         isbn             TEXT,
@@ -391,6 +409,7 @@ def init_target_table(conn: sqlite3.Connection):
         avg_rating       REAL,
         rating_count     REAL,
         is_highly_rated  INTEGER,
+        rating_category  TEXT,
         has_isbn         INTEGER,
         popularity_score REAL,
         title_word_count INTEGER,
@@ -400,7 +419,7 @@ def init_target_table(conn: sqlite3.Connection):
     """)
 
     conn.execute(f"""
-    CREATE TABLE IF NOT EXISTS {LOG_TABLE} (
+    CREATE TABLE IF NOT EXISTS {log_table} (
         run_id            INTEGER PRIMARY KEY AUTOINCREMENT,
         run_timestamp     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         sources_attempted INTEGER,
@@ -416,29 +435,41 @@ def init_target_table(conn: sqlite3.Connection):
     conn.commit()
 
 
-def load_to_sqlite(df: pd.DataFrame, strategy: str = "incremental") -> dict:
+def load_to_sqlite(
+    df: pd.DataFrame,
+    strategy: str = "incremental",
+    db_path: Path | str = None,
+    target_table: str = None,
+    log_table: str = None,
+    run_type: str = "SCHEDULED",
+    raw_count: int = None
+) -> dict:
     """
     Load transformed DataFrame into SQLite.
     Strategies:
       full        — DROP + recreate table (full overwrite)
       incremental — INSERT OR REPLACE (upsert on ol_key)
     """
+    target_db = Path(db_path) if db_path else DB_PATH
+    tbl_name = target_table or TARGET_TABLE
+    log_tbl = log_table or LOG_TABLE
+
     log.info("=" * 60)
     log.info("PHASE iii — DATA LOADING INTO TARGET DATABASE")
     log.info("=" * 60)
     log.info(f"[LOAD] Strategy: {strategy.upper()}")
-    log.info(f"[LOAD] Target DB: {DB_PATH}")
-    log.info(f"[LOAD] Target table: {TARGET_TABLE}")
+    log.info(f"[LOAD] Target DB: {target_db}")
+    log.info(f"[LOAD] Target table: {tbl_name}")
 
     t0 = time.time()
-    conn = sqlite3.connect(str(DB_PATH))
+    conn = sqlite3.connect(str(target_db))
 
     try:
-        init_target_table(conn)
+        init_target_table(conn, target_table=tbl_name, log_table=log_tbl)
 
         if strategy == "full":
             log.info("[LOAD] Full load - dropping existing table data...")
-            conn.execute(f"DELETE FROM {TARGET_TABLE}")
+            conn.execute(f"DELETE FROM {tbl_name}")
             conn.commit()
 
         # ── Upsert / INSERT OR REPLACE ───────────
@@ -447,18 +478,19 @@ def load_to_sqlite(df: pd.DataFrame, strategy: str = "incremental") -> dict:
         for _, row in df.iterrows():
             try:
                 conn.execute(f"""
-                INSERT OR REPLACE INTO {TARGET_TABLE}
+                INSERT OR REPLACE INTO {tbl_name}
                   (ol_key, isbn, title, author, publisher, subject,
                    publish_year, publish_decade, pages, page_tier,
-                   avg_rating, rating_count, is_highly_rated, has_isbn,
+                   avg_rating, rating_count, is_highly_rated, rating_category, has_isbn,
                    popularity_score, title_word_count, api_source)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 """, (
                     row.get("ol_key"), row.get("isbn"), row.get("title"),
                     row.get("author"), row.get("publisher"), row.get("subject"),
                     row.get("publish_year"), row.get("publish_decade"), row.get("pages"),
                     row.get("page_tier"), row.get("avg_rating"), row.get("rating_count"),
-                    int(row.get("is_highly_rated", 0)), int(row.get("has_isbn", 0)),
+                    int(row.get("is_highly_rated", 0)), row.get("rating_category", "Average (3.0-4.0)"),
+                    int(row.get("has_isbn", 0)),
                     row.get("popularity_score"), row.get("title_word_count"), row.get("api_source")
                 ))
                 loaded += 1
@@ -470,13 +502,24 @@ def load_to_sqlite(df: pd.DataFrame, strategy: str = "incremental") -> dict:
 
         # Verify load
         cursor = conn.cursor()
-        cursor.execute(f"SELECT COUNT(*) FROM {TARGET_TABLE}")
+        cursor.execute(f"SELECT COUNT(*) FROM {tbl_name}")
         total_in_db = cursor.fetchone()[0]
 
         elapsed_ms = int((time.time() - t0) * 1000)
+        
+        # Write run log entry
+        conn.execute(f"""
+        INSERT INTO {log_tbl}
+          (sources_attempted, records_extracted, records_after_transform,
+           records_loaded, load_strategy, total_ms, status, error_msg)
+        VALUES (?,?,?,?,?,?,?,?)
+        """, (
+            1, raw_count or len(df), len(df), loaded, strategy, elapsed_ms, "SUCCESS", ""
+        ))
+        conn.commit()
+
         log.info(f"[LOAD] [OK] Loaded: {loaded} records | Skipped: {skipped}")
         log.info(f"[LOAD]   Total records now in DB: {total_in_db}")
-        log.info(f"[LOAD]   DB file size: {round(os.path.getsize(DB_PATH) / 1024, 1)} KB")
         log.info(f"[LOAD]   Execution time: {elapsed_ms}ms\n")
 
         conn.close()
@@ -491,6 +534,91 @@ def load_to_sqlite(df: pd.DataFrame, strategy: str = "incremental") -> dict:
         conn.rollback()
         conn.close()
         raise RuntimeError(f"Load failed: {e}") from e
+
+
+def verify_data_quality(df: pd.DataFrame, report_path: Path | str = None) -> tuple[bool, list[dict]]:
+    """
+    Automated Data Quality Validation Gates.
+    Validates:
+      1. Row count sufficiency
+      2. Critical field null threshold (<= 5%)
+      3. Rating range boundaries (0.0 to 5.0)
+      4. Publish year boundaries (1000 to 2030)
+      5. Primary key (ol_key) uniqueness
+    Returns: (passed: bool, checks: list[dict])
+    """
+    checks = []
+    
+    # 1. Non-empty check
+    row_count = len(df)
+    c1 = {
+        "check": "Row count > 0",
+        "status": "PASS" if row_count > 0 else "FAIL",
+        "details": f"Total rows: {row_count}"
+    }
+    checks.append(c1)
+
+    if row_count == 0:
+        return False, checks
+
+    # 2. Null percentage gate for critical columns
+    crit_cols = ["ol_key", "title", "author", "publish_year", "avg_rating"]
+    present_crit = [c for c in crit_cols if c in df.columns]
+    null_count = df[present_crit].isnull().sum().sum()
+    null_pct = null_count / (len(df) * max(1, len(present_crit)))
+    c2 = {
+        "check": "Critical columns null threshold (< 5%)",
+        "status": "PASS" if null_pct <= 0.05 else "FAIL",
+        "details": f"Null rate: {null_pct:.2%} ({null_count} nulls)"
+    }
+    checks.append(c2)
+
+    # 3. Rating range validation
+    if "avg_rating" in df.columns:
+        invalid_ratings = df[(df["avg_rating"] < 0.0) | (df["avg_rating"] > 5.0)]
+        c3 = {
+            "check": "Rating range [0.0 - 5.0]",
+            "status": "PASS" if len(invalid_ratings) == 0 else "FAIL",
+            "details": f"Invalid ratings: {len(invalid_ratings)}"
+        }
+        checks.append(c3)
+
+    # 4. Publish year validation
+    if "publish_year" in df.columns:
+        invalid_years = df[(df["publish_year"] < 1000) | (df["publish_year"] > 2030)]
+        c4 = {
+            "check": "Publish year range [1000 - 2030]",
+            "status": "PASS" if len(invalid_years) == 0 else "FAIL",
+            "details": f"Invalid years: {len(invalid_years)}"
+        }
+        checks.append(c4)
+
+    # 5. Key uniqueness
+    if "ol_key" in df.columns:
+        dupes = df["ol_key"].duplicated().sum()
+        c5 = {
+            "check": "Primary key (ol_key) uniqueness",
+            "status": "PASS" if dupes == 0 else "FAIL",
+            "details": f"Duplicates: {dupes}"
+        }
+        checks.append(c5)
+
+    all_passed = all(c["status"] == "PASS" for c in checks)
+
+    if report_path:
+        try:
+            report_p = Path(report_path)
+            report_p.parent.mkdir(parents=True, exist_ok=True)
+            with open(report_p, "w", encoding="utf-8") as f:
+                json.dump({
+                    "passed": all_passed,
+                    "timestamp": datetime.now().isoformat(),
+                    "checks": checks
+                }, f, indent=2)
+        except Exception as e:
+            log.warning(f"Could not write quality report to {report_path}: {e}")
+
+    return all_passed, checks
 
 
 # ══════════════════════════════════════════════════

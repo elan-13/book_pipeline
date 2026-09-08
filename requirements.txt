@@ -1,3 +1,9 @@
 flask
 pandas
 numpy
+scikit-learn
+requests
+pyyaml
+pytest
+pytest-mock
+pytest-cov
